@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Fixed)
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.1
 // @description  Интерфейсная панель с работающим меню цены
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -176,7 +176,7 @@
             </select></div>
             <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Модель:</label>
             <select id="price-model-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${modelsHtml}</select></div>
-            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Объём:</label>
+            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Объём (см³):</label>
             <select id="price-engine-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${enginesHtml}</select></div>
             <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Год:</label>
             <select id="price-year-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${yearsHtml}</select></div>
@@ -558,5 +558,5 @@
         attachPriceHandler();
     }, 500);
     
-    console.log('[UI] Модуль загружен (версия 3.0)');
+    console.log('[UI] Модуль загружен (версия 3.1)');
 })();
