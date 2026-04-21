@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Encar UI Module (Fixed)
+// @name         Encar UI Module (Enhanced)
 // @namespace    http://tampermonkey.net/
-// @version      3.1
-// @description  Интерфейсная панель с работающим меню цены
+// @version      5.0
+// @description  Улучшенная панель интерфейса (увеличенный размер)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -23,6 +23,60 @@
     let dragOffsetX = 0, dragOffsetY = 0;
     let isCollapsed = false;
     
+    // ========== СТИЛИ ==========
+    GM_addStyle(`
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .encar-panel {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .encar-panel .loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .encar-panel button {
+            transition: all 0.2s ease;
+        }
+        
+        .encar-panel button:hover {
+            transform: scale(1.02);
+        }
+        
+        .encar-panel .clickable {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .encar-panel .clickable:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
+        
+        .encar-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .encar-panel::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .encar-panel::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+    `);
+    
+    // ========== ФОРМАТИРОВАНИЕ ==========
     function formatVolume(cc) {
         if (!cc) return '—';
         const liters = cc / 1000;
@@ -39,331 +93,302 @@
         return vin ? vin.replace(/\s/g, '').toUpperCase() : '—';
     }
     
+    function formatNumber(num) {
+        return num ? num.toLocaleString() : '—';
+    }
+    
+    // ========== ОБНОВЛЕНИЕ ПАНЕЛИ ==========
     function updatePanel() {
         if (!mainPanel) return;
         
+        // Марка и модель (в левой части заголовка)
         const brand = Hub.get('carBrand') || '—';
         const model = Hub.get('carModel') || '—';
-        const year = Hub.get('carYear');
-        const month = Hub.get('carMonth');
-        const engineVolume = Hub.get('carEngineVolume');
-        const power = Hub.get('carPowerHp');
-        const mileage = Hub.get('carMileage');
+        const modelStr = `${brand} ${model}`.trim();
+        if (modelStr !== '—') {
+            const titleSpan = mainPanel.querySelector('#panel-title');
+            if (titleSpan) titleSpan.textContent = modelStr;
+        }
+        
+        // Просмотры (в правой части заголовка)
         const views = Hub.get('carViews');
-        const vin = Hub.get('carVin');
-        const usdRate = Hub.get('usdRate') || 0;
-        const eurRate = Hub.get('eurRate') || 0;
-        const usdToKrw = Hub.get('usdToKrw') || 0;
-        const usdtRate = Hub.get('usdtRate') || 0;
-        const carPriceKrw = Hub.get('carPriceKrw');
-        const priceUsd = carPriceKrw && usdToKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
-        const euroPrice = Hub.get('selectedEuroPrice');
-        const tpoValue = Hub.get('calculatedTpo');
-        const utilizationFee = Hub.get('utilizationFee');
-        const totalPrice = Hub.get('totalPrice') || 0;
-        const koreaLogistics = Hub.get('koreaLogistics') || 4000;
-        const servicesBishkek = Hub.get('servicesBishkek') || 1200;
-        const docsRf = Hub.get('docsRf') || 80000;
-        const ourServices = Hub.get('ourServices') || 250000;
-        
-        const titleSpan = mainPanel.querySelector('#panel-title');
-        if (titleSpan) titleSpan.textContent = `${brand} ${model}`.trim();
-        
-        const yearSpan = mainPanel.querySelector('#info-year');
-        if (yearSpan) yearSpan.textContent = month ? `${year}/${month}` : (year || '—');
-        
-        const engineSpan = mainPanel.querySelector('#info-engine');
-        if (engineSpan) engineSpan.textContent = formatVolume(engineVolume);
-        
-        const powerSpan = mainPanel.querySelector('#info-power');
-        if (powerSpan) powerSpan.textContent = power ? `${power} л.с.` : '—';
-        
-        const mileageSpan = mainPanel.querySelector('#info-mileage');
-        if (mileageSpan) mileageSpan.textContent = formatMileage(mileage);
-        
-        const vinSpan = mainPanel.querySelector('#info-vin');
-        if (vinSpan) vinSpan.textContent = formatVin(vin);
-        
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
         
+        // Год
+        const year = Hub.get('carYear');
+        const month = Hub.get('carMonth');
+        const yearStr = month ? `${year}/${month}` : (year || '—');
+        const yearSpan = mainPanel.querySelector('#info-year');
+        if (yearSpan) yearSpan.textContent = yearStr;
+        
+        // Двигатель
+        const engineVolume = Hub.get('carEngineVolume');
+        const engineSpan = mainPanel.querySelector('#info-engine');
+        if (engineSpan) engineSpan.textContent = formatVolume(engineVolume);
+        
+        // Мощность
+        const power = Hub.get('carPowerHp');
+        const powerSpan = mainPanel.querySelector('#info-power');
+        if (powerSpan) powerSpan.textContent = power ? `${power} л.с.` : '—';
+        
+        // Пробег
+        const mileage = Hub.get('carMileage');
+        const mileageSpan = mainPanel.querySelector('#info-mileage');
+        if (mileageSpan) mileageSpan.textContent = formatMileage(mileage);
+        
+        // VIN
+        const vin = Hub.get('carVin');
+        const vinSpan = mainPanel.querySelector('#info-vin');
+        if (vinSpan) vinSpan.textContent = formatVin(vin);
+        
+        // Цены
+        const carPriceKrw = Hub.get('carPriceKrw');
         const priceKrwSpan = mainPanel.querySelector('#price-krw');
-        if (priceKrwSpan) priceKrwSpan.textContent = carPriceKrw ? carPriceKrw.toLocaleString() : '—';
+        if (priceKrwSpan) priceKrwSpan.textContent = carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—';
         
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
         const priceUsdSpan = mainPanel.querySelector('#price-usd');
-        if (priceUsdSpan) priceUsdSpan.textContent = priceUsd.toLocaleString();
+        if (priceUsdSpan) priceUsdSpan.textContent = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
         
+        const euroPrice = Hub.get('selectedEuroPrice');
         const priceEuroSpan = mainPanel.querySelector('#price-euro');
         if (priceEuroSpan) {
-            priceEuroSpan.textContent = euroPrice ? `${euroPrice.toLocaleString()} €` : '—';
+            priceEuroSpan.textContent = euroPrice ? `${formatNumber(euroPrice)} €` : '—';
         }
         
+        // Расходы
+        const tpoValue = Hub.get('calculatedTpo');
         const tpoSpan = mainPanel.querySelector('#tpo-value');
-        if (tpoSpan) tpoSpan.innerHTML = tpoValue ? `${tpoValue.toLocaleString()} $` : '<span style="color:#22c55e;">заполните</span>';
+        if (tpoSpan) {
+            tpoSpan.innerHTML = tpoValue ? `${formatNumber(tpoValue)} $` : '<span style="color:#f97316;">заполните</span>';
+        }
         
+        const utilizationFee = Hub.get('utilizationFee');
         const utilSpan = mainPanel.querySelector('#util-value');
-        if (utilSpan) utilSpan.innerHTML = utilizationFee ? `${utilizationFee.toLocaleString()} ₽` : '<span style="color:#22c55e;">заполните</span>';
+        if (utilSpan) {
+            utilSpan.innerHTML = utilizationFee ? `${formatNumber(utilizationFee)} ₽` : '<span style="color:#f97316;">заполните</span>';
+        }
         
+        const totalPrice = Hub.get('totalPrice') || 0;
         const totalSpan = mainPanel.querySelector('#total-price');
-        if (totalSpan) totalSpan.textContent = `${totalPrice.toLocaleString()} ₽`;
+        if (totalSpan) totalSpan.textContent = `${formatNumber(totalPrice)} ₽`;
         
         const collapsedTotalSpan = mainPanel.querySelector('#collapsed-total-price');
-        if (collapsedTotalSpan) collapsedTotalSpan.textContent = `${totalPrice.toLocaleString()} ₽`;
+        if (collapsedTotalSpan) collapsedTotalSpan.textContent = `${formatNumber(totalPrice)} ₽`;
         
+        // Редактируемые расходы
+        const koreaLogistics = Hub.get('koreaLogistics') || 4000;
         const logisticsSpan = mainPanel.querySelector('#logistics-value');
-        if (logisticsSpan) logisticsSpan.textContent = `${koreaLogistics.toLocaleString()} $`;
+        if (logisticsSpan) logisticsSpan.textContent = `${formatNumber(koreaLogistics)} $`;
         
+        const servicesBishkek = Hub.get('servicesBishkek') || 1200;
         const servicesSpan = mainPanel.querySelector('#services-value');
-        if (servicesSpan) servicesSpan.textContent = `${servicesBishkek.toLocaleString()} $`;
+        if (servicesSpan) servicesSpan.textContent = `${formatNumber(servicesBishkek)} $`;
         
+        const docsRf = Hub.get('docsRf') || 80000;
         const docsSpan = mainPanel.querySelector('#docs-value');
-        if (docsSpan) docsSpan.textContent = `${docsRf.toLocaleString()} ₽`;
+        if (docsSpan) docsSpan.textContent = `${formatNumber(docsRf)} ₽`;
         
+        const ourServices = Hub.get('ourServices') || 250000;
         const ourSpan = mainPanel.querySelector('#our-value');
-        if (ourSpan) ourSpan.textContent = `${ourServices.toLocaleString()} ₽`;
+        if (ourSpan) ourSpan.textContent = `${formatNumber(ourServices)} ₽`;
         
+        // Курсы валют
+        const usdRate = Hub.get('usdRate') || 0;
         const usdHeader = mainPanel.querySelector('#usd-header');
         if (usdHeader) usdHeader.textContent = `🇺🇸 ${usdRate.toFixed(2)}`;
         
+        const eurRate = Hub.get('eurRate') || 0;
         const eurHeader = mainPanel.querySelector('#eur-header');
         if (eurHeader) eurHeader.textContent = `🇪🇺 ${eurRate.toFixed(2)}`;
         
+        const usdToKrwRate = Hub.get('usdToKrw') || 0;
         const krwHeader = mainPanel.querySelector('#krw-header');
-        if (krwHeader) krwHeader.textContent = `🇰🇷 ${Math.round(usdToKrw)}`;
+        if (krwHeader) krwHeader.textContent = `🇰🇷 ${Math.round(usdToKrwRate)}`;
         
+        const usdtRate = Hub.get('usdtRate') || 0;
         const usdtHeader = mainPanel.querySelector('#usdt-header');
         if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
-    }
-    
-    function updatePriceMenu() {
-        const innerDiv = document.getElementById('price-content-inner');
-        if (!innerDiv) return;
         
-        const allPriceData = Hub.get('allPriceData');
-        if (!allPriceData || !allPriceData.length) {
-            innerDiv.innerHTML = '<div style="text-align:center; padding:8px;">Загрузка данных...</div>';
-            return;
-        }
-        
-        const selectedBrand = Hub.get('selectedPriceBrand') || '';
-        const selectedModel = Hub.get('selectedPriceModel') || '';
-        const selectedEngine = Hub.get('selectedPriceEngine') || '';
-        const selectedYear = Hub.get('selectedPriceYear') || '';
-        
-        const brands = [...new Set(allPriceData.map(i => i.Марка))].sort();
-        
-        let modelsHtml = '<option value="">— выберите модель —</option>';
-        let enginesHtml = '<option value="">— выберите объём —</option>';
-        let yearsHtml = '<option value="">— выберите год —</option>';
-        
-        if (selectedBrand) {
-            const models = [...new Set(allPriceData.filter(i => i.Марка === selectedBrand).map(i => i.Модель))].sort();
-            modelsHtml = '<option value="">— выберите модель —</option>' + models.map(m => `<option value="${m}" ${m === selectedModel ? 'selected' : ''}>${m}</option>`).join('');
-            if (selectedModel) {
-                const engines = [...new Set(allPriceData.filter(i => i.Марка === selectedBrand && i.Модель === selectedModel).map(i => i.Объем))].sort((a,b) => parseInt(a)-parseInt(b));
-                enginesHtml = '<option value="">— выберите объём —</option>' + engines.map(e => `<option value="${e}" ${String(e) === String(selectedEngine) ? 'selected' : ''}>${e}</option>`).join('');
-                if (selectedEngine) {
-                    const years = [...new Set(allPriceData.filter(i => i.Марка === selectedBrand && i.Модель === selectedModel && i.Объем === selectedEngine).map(i => i.Год))].sort((a,b) => b-a);
-                    yearsHtml = '<option value="">— выберите год —</option>' + years.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
-                }
+        // Статус поиска фото
+        const photoStatus = mainPanel.querySelector('#photo-status');
+        if (photoStatus && unsafeWindow.EncarPhotos) {
+            const photos = unsafeWindow.EncarPhotos.getPhotos();
+            const status = unsafeWindow.EncarPhotos.getScanningStatus?.();
+            if (photos?.length) {
+                photoStatus.innerHTML = `📸 ${photos.length} фото`;
+                photoStatus.style.color = '#22c55e';
+            } else if (status?.isScanning) {
+                photoStatus.innerHTML = `🔍 поиск...`;
+                photoStatus.style.color = '#fbbf24';
+            } else {
+                photoStatus.innerHTML = `📸 нет фото`;
+                photoStatus.style.color = '#ef4444';
             }
         }
-        
-        innerDiv.innerHTML = `
-            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Марка:</label>
-            <select id="price-brand-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">
-                <option value="">— выберите марку —</option>${brands.map(b => `<option value="${b}" ${b === selectedBrand ? 'selected' : ''}>${b}</option>`).join('')}
-            </select></div>
-            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Модель:</label>
-            <select id="price-model-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${modelsHtml}</select></div>
-            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Объём (см³):</label>
-            <select id="price-engine-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${enginesHtml}</select></div>
-            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Год:</label>
-            <select id="price-year-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${yearsHtml}</select></div>
-            <div style="display:flex; gap:8px; margin-top:12px;">
-                <button id="price-apply-auto" style="background:#fbbf24; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:bold;">Применить</button>
-                <button id="price-cancel-auto" style="background:#475569; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; color:white;">Отмена</button>
-            </div>
-        `;
-        
-        const brandSelect = document.getElementById('price-brand-select');
-        const modelSelect = document.getElementById('price-model-select');
-        const engineSelect = document.getElementById('price-engine-select');
-        const yearSelect = document.getElementById('price-year-select');
-        const applyBtn = document.getElementById('price-apply-auto');
-        const cancelBtn = document.getElementById('price-cancel-auto');
-        const priceContent = document.getElementById('price-content');
-        const priceArrow = document.getElementById('price-arrow');
-        
-        if (brandSelect) {
-            brandSelect.onchange = () => {
-                const brand = brandSelect.value;
-                if (!brand) return;
-                const models = [...new Set(allPriceData.filter(i => i.Марка === brand).map(i => i.Модель))].sort();
-                modelSelect.innerHTML = '<option value="">— выберите модель —</option>' + models.map(m => `<option value="${m}">${m}</option>`).join('');
-                modelSelect.disabled = false;
-                engineSelect.disabled = true;
-                yearSelect.disabled = true;
-            };
-        }
-        
-        if (modelSelect) {
-            modelSelect.onchange = () => {
-                const brand = brandSelect.value, model = modelSelect.value;
-                if (!brand || !model) return;
-                const engines = [...new Set(allPriceData.filter(i => i.Марка === brand && i.Модель === model).map(i => i.Объем))].sort((a,b) => parseInt(a)-parseInt(b));
-                engineSelect.innerHTML = '<option value="">— выберите объём —</option>' + engines.map(e => `<option value="${e}">${e}</option>`).join('');
-                engineSelect.disabled = false;
-                yearSelect.disabled = true;
-            };
-        }
-        
-        if (engineSelect) {
-            engineSelect.onchange = () => {
-                const brand = brandSelect.value, model = modelSelect.value, engine = engineSelect.value;
-                if (!brand || !model || !engine) return;
-                const years = [...new Set(allPriceData.filter(i => i.Марка === brand && i.Модель === model && i.Объем === engine).map(i => i.Год))].sort((a,b) => b-a);
-                yearSelect.innerHTML = '<option value="">— выберите год —</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
-                yearSelect.disabled = false;
-            };
-        }
-        
-        if (applyBtn) {
-            applyBtn.onclick = () => {
-                const brand = brandSelect.value, model = modelSelect.value, engine = engineSelect.value, year = parseInt(yearSelect.value);
-                if (!brand || !model || !engine || !year) { alert('Выберите все параметры'); return; }
-                const price = allPriceData.find(i => i.Марка === brand && i.Модель === model && i.Объем === engine && i.Год === year)?.Цена;
-                if (price) {
-                    Hub.set('selectedEuroPrice', price);
-                    const priceSpan = document.getElementById('price-euro');
-                    if (priceSpan) priceSpan.textContent = `${price.toLocaleString()} €`;
-                    updatePanel();
-                }
-                if (priceContent) priceContent.style.display = 'none';
-                if (priceArrow) priceArrow.innerHTML = '▼';
-            };
-        }
-        
-        if (cancelBtn && priceContent && priceArrow) {
-            cancelBtn.onclick = () => {
-                priceContent.style.display = 'none';
-                priceArrow.innerHTML = '▼';
-            };
-        }
     }
     
-    function attachPriceHandler() {
-        const priceSpan = document.getElementById('price-euro');
-        const priceContent = document.getElementById('price-content');
-        const priceArrow = document.getElementById('price-arrow');
-        
-        if (priceSpan && priceContent && priceArrow && !priceSpan._handlerFixed) {
-            priceSpan._handlerFixed = true;
-            priceSpan.style.cursor = 'pointer';
-            priceSpan.style.textDecoration = 'underline';
-            priceSpan.style.color = '#fbbf24';
-            
-            priceSpan.onclick = (e) => {
-                e.stopPropagation();
-                if (priceContent.style.display === 'none') {
-                    priceContent.style.display = 'block';
-                    priceArrow.innerHTML = '▲';
-                    updatePriceMenu();
-                } else {
-                    priceContent.style.display = 'none';
-                    priceArrow.innerHTML = '▼';
-                }
-            };
-            console.log('[UI] ✅ Обработчик цены привязан');
-            return true;
-        }
-        return false;
-    }
-    
+    // ========== СОЗДАНИЕ ПАНЕЛИ ==========
     function createPanel() {
         if (mainPanel) return;
         
         mainPanel = document.createElement('div');
+        mainPanel.className = 'encar-panel';
         mainPanel.id = 'encar-combined-panel';
         mainPanel.style.cssText = `
             position: fixed !important;
             bottom: 20px !important;
             right: 20px !important;
             z-index: 10001 !important;
-            background: linear-gradient(135deg, #0a1a2f 0%, #0f2a44 100%) !important;
-            color: white !important;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+            color: #f1f5f9 !important;
             border-radius: 20px !important;
-            padding: 14px 20px !important;
-            font-family: system-ui, -apple-system, sans-serif !important;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3) !important;
-            border: 1px solid rgba(255,255,255,0.12) !important;
-            font-size: 13px !important;
-            width: 360px !important;
+            padding: 16px 20px !important;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
+            box-shadow: 0 20px 35px -10px rgba(0,0,0,0.4) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            font-size: 14px !important;
+            width: 400px !important;
+            backdrop-filter: blur(8px) !important;
             cursor: move;
             user-select: none;
+            transition: all 0.2s ease;
         `;
         
         mainPanel.innerHTML = `
-            <div id="drag-handle" style="cursor: move; margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:8px;">
-                <div style="display:flex; align-items:center; justify-content:space-between;">
-                    <span id="panel-title" style="font-size:15px; font-weight:600;">Загрузка...</span>
-                    <span id="collapse-btn" style="cursor:pointer; font-size:16px; color:#94a3b8;">−</span>
+            <div id="drag-handle" style="cursor: move; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 16px; font-weight: 700;">🚗 <span id="panel-title">Encar Helper</span></span>
+                        <span id="photo-status" style="font-size: 11px; background: rgba(0,0,0,0.4); padding: 3px 8px; border-radius: 12px;">📸 поиск...</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 12px; color: #94a3b8;">👁️ <span id="info-views">—</span></span>
+                        <span id="collapse-btn" style="cursor: pointer; font-size: 16px; color: #94a3b8; padding: 0 4px;">−</span>
+                    </div>
                 </div>
-                <div style="display:flex; gap:8px; font-size:10px; background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 20px; width:fit-content; margin-top:6px;">
-                    <span id="usd-header" style="cursor:pointer;">🇺🇸 --</span>
-                    <span id="eur-header" style="cursor:pointer;">🇪🇺 --</span>
-                    <span id="krw-header" style="cursor:pointer;">🇰🇷 --</span>
-                    <span id="usdt-header" style="color:#22c55e; font-weight:bold; cursor:pointer;">💎 --</span>
+                <div style="display: flex; gap: 8px; margin-top: 8px; font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 24px; width: fit-content;">
+                    <span id="usd-header" class="clickable" style="color: #60a5fa;">🇺🇸 --</span>
+                    <span style="color: #475569;">|</span>
+                    <span id="eur-header" class="clickable" style="color: #60a5fa;">🇪🇺 --</span>
+                    <span style="color: #475569;">|</span>
+                    <span id="krw-header" class="clickable" style="color: #60a5fa;">🇰🇷 --</span>
+                    <span style="color: #475569;">|</span>
+                    <span id="usdt-header" class="clickable" style="color: #fbbf24; font-weight: 600;">💎 --</span>
                 </div>
             </div>
+            
             <div id="panel-full-content">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; margin-bottom:12px;">
-                    <div><span style="color:#94a3b8;">📅 Год</span><br><span id="info-year">—</span></div>
-                    <div><span style="color:#94a3b8;">🔧 Двигатель</span><br><span id="info-engine">—</span></div>
-                    <div><span style="color:#94a3b8;">⚡ Мощность</span><br><span id="info-power" style="cursor:pointer;">—</span></div>
-                    <div><span style="color:#94a3b8;">📊 Пробег</span><br><span id="info-mileage">—</span></div>
-                    <div><span style="color:#94a3b8;">🔢 VIN</span><br><span id="info-vin" style="font-family:monospace; font-size:11px; cursor:pointer;">—</span></div>
-                    <div><span style="color:#94a3b8;">👁️ Просмотры</span><br><span id="info-views">—</span></div>
+                <!-- Основная информация (вертикальный список) -->
+                <div style="margin-bottom: 14px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #94a3b8; font-size: 13px;">📅 Год выпуска</span>
+                        <span id="info-year" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #94a3b8; font-size: 13px;">🔧 Двигатель</span>
+                        <span id="info-engine" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #94a3b8; font-size: 13px;">⚡ Мощность</span>
+                        <span id="info-power" class="clickable" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #94a3b8; font-size: 13px;">📊 Пробег</span>
+                        <span id="info-mileage" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #94a3b8; font-size: 13px;">🔢 VIN номер</span>
+                        <span id="info-vin" class="clickable" style="font-family: monospace; font-size: 12px; cursor: pointer;">—</span>
+                    </div>
                 </div>
-                <div style="background:rgba(255,255,255,0.05); border-radius:12px; padding:8px; margin-bottom:10px;">
-                    <div style="font-size:11px; color:#94a3b8; margin-bottom:5px;">💰 Цена авто</div>
-                    <div style="display:flex; justify-content:space-between;"><span>🇰🇷 KRW:</span><span id="price-krw" style="color:#fbbf24;">—</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>🇺🇸 USD:</span><span id="price-usd">—</span></div>
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span>🇪🇺 EUR:</span>
-                        <div style="position:relative;">
-                            <span id="price-euro" style="cursor:pointer; text-decoration:underline; color:#fbbf24;">—</span>
-                            <span id="price-arrow" style="margin-left:6px; font-size:10px; color:#94a3b8;">▼</span>
+                
+                <!-- Цена авто -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 14px; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">💰 Цена авто</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px;">🇰🇷 KRW:</span>
+                        <span id="price-krw" style="color: #fbbf24; font-weight: 600; font-size: 14px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px;">🇺🇸 USD:</span>
+                        <span id="price-usd" style="color: #fbbf24; font-weight: 600; font-size: 14px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 13px;">🇪🇺 EUR:</span>
+                        <div style="position: relative;">
+                            <span id="price-euro" class="clickable" style="color: #fbbf24; font-weight: 700; font-size: 15px; text-decoration: underline;">—</span>
+                            <span id="price-arrow" style="margin-left: 4px; font-size: 10px; color: #94a3b8;">▼</span>
                         </div>
                     </div>
-                    <div id="price-content" style="display:none; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.08);">
-                        <div id="price-content-inner" style="font-size:12px;">Загрузка...</div>
+                    <div id="price-content" style="display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+                        <div id="price-content-inner" style="font-size: 12px;">Загрузка...</div>
                     </div>
                 </div>
-                <div style="margin-bottom:8px;"><div style="display:flex; justify-content:space-between;"><span style="color:#94a3b8;">🏛️ ТПО:</span><span id="tpo-value" style="cursor:pointer;">—</span></div></div>
-                <div style="margin-bottom:8px;"><div style="display:flex; justify-content:space-between;"><span style="color:#94a3b8;">♻️ Утильсбор:</span><span id="util-value" style="cursor:pointer;">—</span></div></div>
-                <div style="background:rgba(255,255,255,0.05); border-radius:12px; padding:8px; margin-top:8px;">
-                    <div style="font-size:11px; color:#94a3b8; margin-bottom:5px;">📋 Расходы</div>
-                    <div style="display:flex; justify-content:space-between;"><span>📦 Корея:</span><span id="logistics-value" style="cursor:pointer;">—</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>🚚 Бишкек:</span><span id="services-value" style="cursor:pointer;">—</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>📄 Документы:</span><span id="docs-value" style="cursor:pointer;">—</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span>🤝 Наши услуги:</span><span id="our-value" style="cursor:pointer;">—</span></div>
+                
+                <!-- ТПО и Утильсбор -->
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 4px 0;">
+                    <span style="color: #94a3b8; font-size: 13px;">🏛️ ТПО:</span>
+                    <span id="tpo-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
                 </div>
-                <div style="border-top:1px solid #475569; padding-top:10px; margin-top:8px;">
-                    <div style="display:flex; justify-content:space-between;"><span style="font-weight:700; color:#fbbf24;">💰 ИТОГО:</span><span id="total-price" style="font-size:18px; font-weight:800; color:#fbbf24;">0 ₽</span></div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding: 4px 0;">
+                    <span style="color: #94a3b8; font-size: 13px;">♻️ Утильсбор:</span>
+                    <span id="util-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
                 </div>
-                <button id="print-report-btn" style="margin-top:12px; width:100%; background:#fbbf24; border:none; padding:8px 12px; border-radius:10px; font-weight:bold; cursor:pointer; color:#0a1a2f; font-size:13px;">🖨️ Коммерческое предложение</button>
+                
+                <!-- Расходы -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 14px; padding: 12px; margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">📋 Расходы</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px;">📦 Корея + логистика:</span>
+                        <span id="logistics-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px;">🚚 Услуги Бишкек + доставка:</span>
+                        <span id="services-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span style="font-size: 13px;">📄 Документы РФ:</span>
+                        <span id="docs-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 13px;">🤝 Наши услуги:</span>
+                        <span id="our-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                    </div>
+                </div>
+                
+                <!-- Итого -->
+                <div style="border-top: 2px solid #fbbf24; padding-top: 12px; margin-top: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <span style="font-weight: 700; color: #fbbf24; font-size: 16px;">💰 ИТОГО:</span>
+                        <span id="total-price" style="font-size: 22px; font-weight: 800; color: #fbbf24;">0 ₽</span>
+                    </div>
+                </div>
+                
+                <!-- Кнопки действий -->
+                <div style="display: flex; gap: 10px; margin-top: 16px;">
+                    <button id="print-report-btn" style="flex: 1; background: #fbbf24; border: none; padding: 10px 0; border-radius: 12px; font-weight: 700; cursor: pointer; color: #0f172a; font-size: 14px; transition: all 0.2s;">
+                        🖨️ Коммерческое предложение
+                    </button>
+                    <button id="refresh-panel-btn" style="background: rgba(255,255,255,0.1); border: none; padding: 10px 14px; border-radius: 12px; font-weight: 600; cursor: pointer; color: #f1f5f9; font-size: 14px; transition: all 0.2s;">
+                        🔄
+                    </button>
+                </div>
             </div>
-            <div id="panel-collapsed-content" style="display:none;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#94a3b8; font-size:12px;">💰 ИТОГО:</span>
-                    <span id="collapsed-total-price" style="font-size:16px; font-weight:800; color:#fbbf24;">0 ₽</span>
+            
+            <div id="panel-collapsed-content" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #94a3b8; font-size: 13px;">💰 ИТОГО:</span>
+                    <span id="collapsed-total-price" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0 ₽</span>
                 </div>
             </div>
         `;
         
         document.body.appendChild(mainPanel);
         
+        // ========== DRAG & DROP ==========
         const dragHandle = document.getElementById('drag-handle');
         if (dragHandle) {
             dragHandle.addEventListener('mousedown', (e) => {
@@ -397,6 +422,7 @@
             }
         });
         
+        // ========== СВОРАЧИВАНИЕ ==========
         const collapseBtn = document.getElementById('collapse-btn');
         const fullContent = document.getElementById('panel-full-content');
         const collapsedContent = document.getElementById('panel-collapsed-content');
@@ -407,156 +433,140 @@
                 if (isCollapsed) {
                     fullContent.style.display = 'block';
                     collapsedContent.style.display = 'none';
-                    mainPanel.style.width = '360px';
+                    mainPanel.style.width = '400px';
+                    mainPanel.style.padding = '16px 20px';
+                    collapseBtn.textContent = '−';
                     isCollapsed = false;
                 } else {
                     fullContent.style.display = 'none';
                     collapsedContent.style.display = 'block';
-                    mainPanel.style.width = '280px';
+                    mainPanel.style.width = '240px';
+                    mainPanel.style.padding = '12px 16px';
+                    collapseBtn.textContent = '+';
                     isCollapsed = true;
                 }
             });
         }
         
-        const powerSpan = mainPanel.querySelector('#info-power');
-        if (powerSpan) {
-            powerSpan.onclick = () => {
-                const newPower = prompt('Введите мощность в л.с.:', Hub.get('carPowerHp') || '');
-                if (newPower && !isNaN(parseInt(newPower))) {
-                    Hub.set('carPowerHp', parseInt(newPower));
-                    Hub.set('carPowerKw', Math.round(parseInt(newPower) / 1.341));
+        // ========== ОБРАБОТЧИКИ КЛИКОВ ==========
+        
+        // Курсы валют
+        document.getElementById('usd-header').onclick = () => {
+            const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5);
+            if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val));
+        };
+        document.getElementById('eur-header').onclick = () => {
+            const val = prompt('Курс EUR/RUB:', Hub.get('eurRate') || 104.2);
+            if (val && !isNaN(parseFloat(val))) Hub.set('eurRate', parseFloat(val));
+        };
+        document.getElementById('krw-header').onclick = () => {
+            const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473);
+            if (val && !isNaN(parseFloat(val))) Hub.set('usdToKrw', parseFloat(val));
+        };
+        document.getElementById('usdt-header').onclick = () => {
+            const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90);
+            if (val && !isNaN(parseFloat(val))) Hub.set('usdtRate', parseFloat(val));
+        };
+        
+        // Редактируемые поля
+        document.getElementById('info-power').onclick = () => {
+            const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || '');
+            if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val));
+        };
+        document.getElementById('info-vin').onclick = () => {
+            const vin = Hub.get('carVin');
+            if (vin) {
+                navigator.clipboard.writeText(vin);
+                const span = document.getElementById('info-vin');
+                const orig = span.textContent;
+                span.textContent = '✅ Скопировано!';
+                setTimeout(() => span.textContent = orig, 1500);
+            }
+        };
+        document.getElementById('logistics-value').onclick = () => {
+            const val = prompt('Расходы Корея + логистика ($):', Hub.get('koreaLogistics') || 4000);
+            if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
+        };
+        document.getElementById('services-value').onclick = () => {
+            const val = prompt('Услуги Бишкек + доставка ($):', Hub.get('servicesBishkek') || 1200);
+            if (val && !isNaN(parseFloat(val))) Hub.set('servicesBishkek', parseFloat(val));
+        };
+        document.getElementById('docs-value').onclick = () => {
+            const val = prompt('Документы РФ (₽):', Hub.get('docsRf') || 80000);
+            if (val && !isNaN(parseFloat(val))) Hub.set('docsRf', parseFloat(val));
+        };
+        document.getElementById('our-value').onclick = () => {
+            const val = prompt('Наши услуги (₽):', Hub.get('ourServices') || 250000);
+            if (val && !isNaN(parseFloat(val))) Hub.set('ourServices', parseFloat(val));
+        };
+        document.getElementById('tpo-value').onclick = () => {
+            const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || '';
+            const val = prompt('ТПО в USD (оставьте пустым для авто):', current);
+            if (val === '') Hub.set('manualTpo', null);
+            else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val));
+        };
+        document.getElementById('util-value').onclick = () => {
+            const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || '';
+            const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current);
+            if (val === '') Hub.set('manualUtilizationFee', null);
+            else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val));
+        };
+        
+        // Меню цены
+        const priceSpan = document.getElementById('price-euro');
+        const priceContent = document.getElementById('price-content');
+        const priceArrow = document.getElementById('price-arrow');
+        
+        if (priceSpan && priceContent && priceArrow) {
+            priceSpan.onclick = (e) => {
+                e.stopPropagation();
+                if (priceContent.style.display === 'none') {
+                    priceContent.style.display = 'block';
+                    priceArrow.innerHTML = '▲';
+                    if (unsafeWindow.EncarPrice?.updateDisplay) {
+                        unsafeWindow.EncarPrice.updateDisplay();
+                    } else if (Hub) {
+                        Hub.emit('priceContent:update', {});
+                    }
+                } else {
+                    priceContent.style.display = 'none';
+                    priceArrow.innerHTML = '▼';
                 }
             };
         }
         
-        const vinSpan = mainPanel.querySelector('#info-vin');
-        if (vinSpan) {
-            vinSpan.onclick = () => {
-                const vin = Hub.get('carVin');
-                if (vin) {
-                    navigator.clipboard.writeText(vin);
-                    const orig = vinSpan.textContent;
-                    vinSpan.textContent = '✅ Скопировано!';
-                    setTimeout(() => { vinSpan.textContent = orig; }, 1500);
-                }
-            };
-        }
+        // Кнопка обновления
+        document.getElementById('refresh-panel-btn').onclick = () => {
+            updatePanel();
+            if (unsafeWindow.EncarPrice?.refresh) unsafeWindow.EncarPrice.refresh();
+            console.log('[UI] Панель обновлена');
+        };
         
-        const logisticsSpan = mainPanel.querySelector('#logistics-value');
-        if (logisticsSpan) {
-            logisticsSpan.onclick = () => {
-                const val = prompt('Расходы Корея + логистика ($):', Hub.get('koreaLogistics') || 4000);
-                if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
-            };
-        }
-        
-        const servicesSpan = mainPanel.querySelector('#services-value');
-        if (servicesSpan) {
-            servicesSpan.onclick = () => {
-                const val = prompt('Услуги Бишкек + доставка ($):', Hub.get('servicesBishkek') || 1200);
-                if (val && !isNaN(parseFloat(val))) Hub.set('servicesBishkek', parseFloat(val));
-            };
-        }
-        
-        const docsSpan = mainPanel.querySelector('#docs-value');
-        if (docsSpan) {
-            docsSpan.onclick = () => {
-                const val = prompt('Документы РФ (₽):', Hub.get('docsRf') || 80000);
-                if (val && !isNaN(parseFloat(val))) Hub.set('docsRf', parseFloat(val));
-            };
-        }
-        
-        const ourSpan = mainPanel.querySelector('#our-value');
-        if (ourSpan) {
-            ourSpan.onclick = () => {
-                const val = prompt('Наши услуги (₽):', Hub.get('ourServices') || 250000);
-                if (val && !isNaN(parseFloat(val))) Hub.set('ourServices', parseFloat(val));
-            };
-        }
-        
-        const tpoSpan = mainPanel.querySelector('#tpo-value');
-        if (tpoSpan) {
-            tpoSpan.onclick = () => {
-                const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || '';
-                const val = prompt('ТПО в USD (оставьте пустым для авто):', current);
-                if (val === '') Hub.set('manualTpo', null);
-                else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val));
-            };
-        }
-        
-        const utilSpan = mainPanel.querySelector('#util-value');
-        if (utilSpan) {
-            utilSpan.onclick = () => {
-                const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || '';
-                const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current);
-                if (val === '') Hub.set('manualUtilizationFee', null);
-                else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val));
-            };
-        }
-        
-        const usdHeader = mainPanel.querySelector('#usd-header');
-        if (usdHeader) {
-            usdHeader.onclick = () => {
-                const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5);
-                if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val));
-            };
-        }
-        
-        const eurHeader = mainPanel.querySelector('#eur-header');
-        if (eurHeader) {
-            eurHeader.onclick = () => {
-                const val = prompt('Курс EUR/RUB:', Hub.get('eurRate') || 104.2);
-                if (val && !isNaN(parseFloat(val))) Hub.set('eurRate', parseFloat(val));
-            };
-        }
-        
-        const krwHeader = mainPanel.querySelector('#krw-header');
-        if (krwHeader) {
-            krwHeader.onclick = () => {
-                const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473);
-                if (val && !isNaN(parseFloat(val))) Hub.set('usdToKrw', parseFloat(val));
-            };
-        }
-        
-        const usdtHeader = mainPanel.querySelector('#usdt-header');
-        if (usdtHeader) {
-            usdtHeader.onclick = () => {
-                const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90);
-                if (val && !isNaN(parseFloat(val))) Hub.set('usdtRate', parseFloat(val));
-            };
-        }
-        
-        const printBtn = mainPanel.querySelector('#print-report-btn');
-        if (printBtn && unsafeWindow.EncarPhotos) {
-            printBtn.onclick = () => unsafeWindow.EncarPhotos.print();
-        }
+        // Кнопка печати
+        document.getElementById('print-report-btn').onclick = () => {
+            if (unsafeWindow.EncarPhotos?.print) {
+                unsafeWindow.EncarPhotos.print();
+            } else {
+                alert('Модуль фото не загружен');
+            }
+        };
         
         updatePanel();
-        setTimeout(() => attachPriceHandler(), 100);
+        
+        // Периодическое обновление панели
+        setInterval(() => updatePanel(), 5000);
     }
     
+    // ========== ПОДПИСКИ НА СОБЫТИЯ ==========
     Hub.on('any:changed', () => updatePanel());
-    Hub.on('priceContent:update', () => updatePriceMenu());
-    Hub.on('priceData:loaded', () => {
-        if (document.getElementById('price-content')?.style.display === 'block') {
-            updatePriceMenu();
+    Hub.on('priceContent:update', () => {
+        if (unsafeWindow.EncarPrice?.updateDisplay) {
+            unsafeWindow.EncarPrice.updateDisplay();
         }
-        attachPriceHandler();
     });
     
-    const observer = new MutationObserver(() => {
-        attachPriceHandler();
-    });
-    
+    // ========== ЗАПУСК ==========
     createPanel();
     
-    setTimeout(() => {
-        const panel = document.getElementById('encar-combined-panel');
-        if (panel) {
-            observer.observe(panel, { childList: true, subtree: true });
-        }
-        attachPriceHandler();
-    }, 500);
-    
-    console.log('[UI] Модуль загружен (версия 3.1)');
+    console.log('[UI] Увеличенная панель загружена v5.0');
 })();
