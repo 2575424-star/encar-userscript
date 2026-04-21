@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar Price Module (GitHub CSV)
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.2
 // @description  Загрузка стоимости из CSV файла в репозитории GitHub
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -133,63 +133,46 @@
             Hub.set('selectedEuroPrice', euroPrice);
             console.log(`[Price] ✅ Цена установлена: ${euroPrice.toLocaleString()} €`);
         }
+        
+        // Обновляем UI
+        const priceSpan = document.getElementById('price-euro');
+        if (priceSpan && euroPrice) {
+            priceSpan.textContent = `${euroPrice.toLocaleString()} €`;
+        }
     }
     
     function loadPriceData() {
         console.log('[Price] Загрузка CSV из репозитория:', CSV_URL);
         
-        // Используем fetch (работает в консоли и в скрипте)
-        fetch(CSV_URL)
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.text();
-            })
-            .then(csvText => {
-                const data = parseCSV(csvText);
-                if (data.length > 0) {
-                    setDataAndNotify(data);
-                    autoSelectPrice();
-                } else {
-                    console.error('[Price] Не удалось распарсить CSV через fetch');
-                    fallbackLoad();
-                }
-            })
-            .catch(err => {
-                console.error('[Price] Ошибка fetch:', err);
-                fallbackLoad();
-            });
-        
-        function fallbackLoad() {
-            console.log('[Price] Пробуем GM_xmlhttpRequest...');
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: CSV_URL,
-                timeout: 10000,
-                onload: function(res) {
-                    if (res.status === 200 && res.responseText && res.responseText.length > 100) {
-                        const data = parseCSV(res.responseText);
-                        if (data.length > 0) {
-                            setDataAndNotify(data);
-                            autoSelectPrice();
-                        } else {
-                            console.error('[Price] Не удалось распарсить CSV через GM_xmlhttpRequest');
-                            setDefaultPriceData();
-                        }
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: CSV_URL,
+            timeout: 15000,
+            onload: function(res) {
+                console.log('[Price] GM_xmlhttpRequest статус:', res.status);
+                if (res.status === 200 && res.responseText && res.responseText.length > 100) {
+                    const data = parseCSV(res.responseText);
+                    if (data.length > 0) {
+                        setDataAndNotify(data);
+                        autoSelectPrice();
                     } else {
-                        console.error('[Price] Ошибка загрузки CSV, статус:', res.status);
+                        console.error('[Price] Не удалось распарсить CSV');
                         setDefaultPriceData();
                     }
-                },
-                onerror: function(err) {
-                    console.error('[Price] Ошибка GM_xmlhttpRequest:', err);
-                    setDefaultPriceData();
-                },
-                ontimeout: function() {
-                    console.error('[Price] Таймаут GM_xmlhttpRequest');
+                } else {
+                    console.error('[Price] Ошибка загрузки CSV, статус:', res.status);
                     setDefaultPriceData();
                 }
-            });
-        }
+            },
+            onerror: function(err) {
+                console.error('[Price] Ошибка GM_xmlhttpRequest:', err);
+                setDefaultPriceData();
+            },
+            ontimeout: function() {
+                console.error('[Price] Таймаут GM_xmlhttpRequest');
+                setDefaultPriceData();
+            }
+        });
     }
     
     function setDefaultPriceData() {
@@ -197,6 +180,8 @@
             { Марка: 'BMW', Модель: 'X6', Объем: '3000', Год: 2025, Цена: 33000 },
             { Марка: 'BMW', Модель: 'X5', Объем: '3000', Год: 2025, Цена: 32000 },
             { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2015, Цена: 25000 },
+            { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2016, Цена: 27000 },
+            { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2017, Цена: 30000 },
             { Марка: 'HYUNDAI', Модель: 'SANTA FE', Объем: '2000', Год: 2025, Цена: 25000 },
             { Марка: 'KIA', Модель: 'SORENTO', Объем: '2000', Год: 2025, Цена: 24000 }
         ];
@@ -205,6 +190,13 @@
         Hub.set('allPriceData', allPriceData);
         console.warn('[Price] Используются тестовые данные (CSV не загружен)');
         autoSelectPrice();
+        
+        // Обновляем UI
+        const euroPrice = getCurrentEuroPrice();
+        const priceSpan = document.getElementById('price-euro');
+        if (priceSpan && euroPrice) {
+            priceSpan.textContent = `${euroPrice.toLocaleString()} €`;
+        }
     }
     
     function autoSelectPrice() {
@@ -225,6 +217,12 @@
                 selectedPriceYear = year;
                 Hub.set('selectedEuroPrice', price);
                 console.log(`[Price] ✅ Авто-выбор цены: ${price.toLocaleString()} €`);
+                
+                // Обновляем отображение цены
+                const priceSpan = document.getElementById('price-euro');
+                if (priceSpan) {
+                    priceSpan.textContent = `${price.toLocaleString()} €`;
+                }
             } else {
                 console.log(`[Price] ⚠️ Цена не найдена для ${brand} ${model}`);
             }
@@ -240,6 +238,141 @@
             selectedPriceYear = null;
             Hub.set('selectedEuroPrice', price);
             console.log(`[Price] Ручная установка: ${price.toLocaleString()} €`);
+            
+            const priceSpan = document.getElementById('price-euro');
+            if (priceSpan) {
+                priceSpan.textContent = `${price.toLocaleString()} €`;
+            }
+        }
+    }
+    
+    // Функция для UI модуля (обновление выпадающего меню)
+    function getAllPriceData() {
+        return allPriceData;
+    }
+    
+    function updatePriceContentDisplay() {
+        const innerDiv = document.getElementById('price-content-inner');
+        if (!innerDiv) return;
+        
+        if (!allPriceData.length) {
+            innerDiv.innerHTML = '<div style="text-align:center; padding:8px;">Загрузка данных...</div>';
+            return;
+        }
+        
+        const brands = [...new Set(allPriceData.map(i => i.Марка))].sort();
+        const selectedBrand = selectedPriceBrand || '';
+        const selectedModel = selectedPriceModel || '';
+        const selectedEngine = selectedPriceEngine || '';
+        const selectedYear = selectedPriceYear || '';
+        
+        let modelsHtml = '<option value="">— выберите модель —</option>';
+        let enginesHtml = '<option value="">— выберите объём —</option>';
+        let yearsHtml = '<option value="">— выберите год —</option>';
+        
+        if (selectedBrand) {
+            const models = [...new Set(allPriceData.filter(i => i.Марка === selectedBrand).map(i => i.Модель))].sort();
+            modelsHtml = '<option value="">— выберите модель —</option>' + models.map(m => `<option value="${m}" ${m === selectedModel ? 'selected' : ''}>${m}</option>`).join('');
+            if (selectedModel) {
+                const engines = [...new Set(allPriceData.filter(i => i.Марка === selectedBrand && i.Модель === selectedModel).map(i => i.Объем))].sort((a,b) => parseInt(a)-parseInt(b));
+                enginesHtml = '<option value="">— выберите объём —</option>' + engines.map(e => `<option value="${e}" ${String(e) === String(selectedEngine) ? 'selected' : ''}>${e}</option>`).join('');
+                if (selectedEngine) {
+                    const years = [...new Set(allPriceData.filter(i => i.Марка === selectedBrand && i.Модель === selectedModel && i.Объем === selectedEngine).map(i => i.Год))].sort((a,b) => b-a);
+                    yearsHtml = '<option value="">— выберите год —</option>' + years.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+                }
+            }
+        }
+        
+        innerDiv.innerHTML = `
+            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Марка:</label>
+            <select id="price-brand-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">
+                <option value="">— выберите марку —</option>${brands.map(b => `<option value="${b}" ${b === selectedBrand ? 'selected' : ''}>${b}</option>`).join('')}
+            </select></div>
+            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Модель:</label>
+            <select id="price-model-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${modelsHtml}</select></div>
+            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Объём (см³):</label>
+            <select id="price-engine-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${enginesHtml}</select></div>
+            <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Год:</label>
+            <select id="price-year-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">${yearsHtml}</select></div>
+            <div style="display:flex; gap:8px; margin-top:12px;">
+                <button id="price-apply-auto" style="background:#fbbf24; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:bold;">Применить</button>
+                <button id="price-cancel-auto" style="background:#475569; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; color:white;">Отмена</button>
+            </div>
+        `;
+        
+        const brandSelect = document.getElementById('price-brand-select');
+        const modelSelect = document.getElementById('price-model-select');
+        const engineSelect = document.getElementById('price-engine-select');
+        const yearSelect = document.getElementById('price-year-select');
+        const applyBtn = document.getElementById('price-apply-auto');
+        const cancelBtn = document.getElementById('price-cancel-auto');
+        const priceContent = document.getElementById('price-content');
+        const priceArrow = document.getElementById('price-arrow');
+        const priceSpan = document.getElementById('price-euro');
+        
+        if (brandSelect) {
+            brandSelect.onchange = () => {
+                const brand = brandSelect.value;
+                if (!brand) {
+                    modelSelect.innerHTML = '<option value="">— выберите модель —</option>';
+                    modelSelect.disabled = true;
+                    engineSelect.disabled = true;
+                    yearSelect.disabled = true;
+                    return;
+                }
+                const models = [...new Set(allPriceData.filter(i => i.Марка === brand).map(i => i.Модель))].sort();
+                modelSelect.innerHTML = '<option value="">— выберите модель —</option>' + models.map(m => `<option value="${m}">${m}</option>`).join('');
+                modelSelect.disabled = false;
+                engineSelect.disabled = true;
+                yearSelect.disabled = true;
+            };
+        }
+        
+        if (modelSelect) {
+            modelSelect.onchange = () => {
+                const brand = brandSelect.value, model = modelSelect.value;
+                if (!brand || !model) return;
+                const engines = [...new Set(allPriceData.filter(i => i.Марка === brand && i.Модель === model).map(i => i.Объем))].sort((a,b) => parseInt(a)-parseInt(b));
+                engineSelect.innerHTML = '<option value="">— выберите объём —</option>' + engines.map(e => `<option value="${e}">${e}</option>`).join('');
+                engineSelect.disabled = false;
+                yearSelect.disabled = true;
+            };
+        }
+        
+        if (engineSelect) {
+            engineSelect.onchange = () => {
+                const brand = brandSelect.value, model = modelSelect.value, engine = engineSelect.value;
+                if (!brand || !model || !engine) return;
+                const years = [...new Set(allPriceData.filter(i => i.Марка === brand && i.Модель === model && i.Объем === engine).map(i => i.Год))].sort((a,b) => b-a);
+                yearSelect.innerHTML = '<option value="">— выберите год —</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+                yearSelect.disabled = false;
+            };
+        }
+        
+        if (applyBtn) {
+            applyBtn.onclick = () => {
+                const brand = brandSelect.value, model = modelSelect.value, engine = engineSelect.value, year = parseInt(yearSelect.value);
+                if (!brand || !model || !engine || !year) { alert('Выберите все параметры'); return; }
+                const price = allPriceData.find(i => i.Марка === brand && i.Модель === model && i.Объем === engine && i.Год === year)?.Цена;
+                if (price) {
+                    setManualPrice(price);
+                    Hub.set('selectedPriceBrand', brand);
+                    Hub.set('selectedPriceModel', model);
+                    Hub.set('selectedPriceEngine', engine);
+                    Hub.set('selectedPriceYear', year);
+                    if (priceSpan) priceSpan.textContent = `${price.toLocaleString()} €`;
+                    console.log(`[Price] Применена цена: ${price.toLocaleString()} €`);
+                }
+                if (priceContent) priceContent.style.display = 'none';
+                if (priceArrow) priceArrow.innerHTML = '▼';
+            };
+        }
+        
+        if (cancelBtn && priceContent && priceArrow) {
+            cancelBtn.onclick = () => {
+                priceContent.style.display = 'none';
+                priceArrow.innerHTML = '▼';
+            };
         }
     }
     
@@ -248,7 +381,8 @@
         refresh: loadPriceData,
         findPrice: (brand, model, engine, year) => findPriceFromData(brand, model, engine, year),
         getCurrentPrice: getCurrentEuroPrice,
-        getData: () => allPriceData
+        getData: () => allPriceData,
+        updateDisplay: updatePriceContentDisplay
     };
     
     Hub.on('carData:ready', () => {
@@ -260,8 +394,12 @@
         }
     });
     
+    Hub.on('priceContent:update', () => {
+        updatePriceContentDisplay();
+    });
+    
     // Запускаем загрузку
     loadPriceData();
     
-    console.log('[Price] Модуль загружен (версия 3.1)');
+    console.log('[Price] Модуль загружен (версия 3.2)');
 })();
