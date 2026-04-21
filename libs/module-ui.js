@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Fixed)
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  Интерфейсная панель с работающим меню цены
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -104,7 +104,6 @@
         const priceUsdSpan = mainPanel.querySelector('#price-usd');
         if (priceUsdSpan) priceUsdSpan.textContent = priceUsd.toLocaleString();
         
-        // Обновляем цену в евро
         const priceEuroSpan = mainPanel.querySelector('#encar-price-value');
         if (priceEuroSpan) {
             priceEuroSpan.textContent = euroPrice ? `${euroPrice.toLocaleString()} €` : '—';
@@ -456,7 +455,6 @@
             };
         }
         
-        // Расходы
         const logisticsSpan = mainPanel.querySelector('#logistics-value');
         if (logisticsSpan) {
             logisticsSpan.onclick = () => {
@@ -509,7 +507,6 @@
             };
         }
         
-        // Курсы
         const usdHeader = mainPanel.querySelector('#usd-header');
         if (usdHeader) {
             usdHeader.onclick = () => {
@@ -542,7 +539,6 @@
             };
         }
         
-        // Кнопка печати
         const printBtn = mainPanel.querySelector('#print-report-btn');
         if (printBtn && unsafeWindow.EncarPhotos) {
             printBtn.onclick = () => unsafeWindow.EncarPhotos.print();
