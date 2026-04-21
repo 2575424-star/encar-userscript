@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      12.0
-// @description  Финальная версия панели (со страховыми выплатами)
+// @version      13.0
+// @description  Финальная версия панели (объединённая цена в Корее)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -22,7 +22,6 @@
     let isDragging = false;
     let dragOffsetX = 0, dragOffsetY = 0;
     let isCollapsed = false;
-    let accidentDetails = null;
     
     // ========== СТИЛИ ==========
     GM_addStyle(`
@@ -118,12 +117,6 @@
         return num ? num.toLocaleString() : '—';
     }
     
-    function formatAccidentTotal(accidentInfo) {
-        if (!accidentInfo || accidentInfo.count === undefined) return '—';
-        if (accidentInfo.count === 0) return 'Без ДТП';
-        return `${accidentInfo.totalUsd?.toLocaleString() || '0'} $`;
-    }
-    
     // ========== ОБНОВЛЕНИЕ ПАНЕЛИ ==========
     function updatePanel() {
         if (!mainPanel) return;
@@ -204,17 +197,17 @@
             accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
         }
         
-        // Цена в Корее (KRW)
+        // Цена в Корее (KRW и USD в одной строке)
         const carPriceKrw = Hub.get('carPriceKrw');
-        const priceKrwSpan = mainPanel.querySelector('#price-krw');
-        if (priceKrwSpan) priceKrwSpan.textContent = carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—';
-        
-        // Цена в USD
         const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
-        const priceUsdSpan = mainPanel.querySelector('#price-usd');
-        if (priceUsdSpan) priceUsdSpan.textContent = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
+        const priceValueSpan = mainPanel.querySelector('#price-value');
+        if (priceValueSpan) {
+            const krwText = carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—';
+            const usdText = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
+            priceValueSpan.innerHTML = `${krwText} / ${usdText}`;
+        }
         
-        // Расходы/Логистика до КГ
+        // Расходы Корея/Логистика
         const logisticsKg = Hub.get('koreaLogistics') || 5000;
         const logisticsSpan = mainPanel.querySelector('#logistics-kg');
         if (logisticsSpan) logisticsSpan.textContent = `${formatNumber(logisticsKg)} $`;
@@ -412,23 +405,19 @@
                     </div>
                 </div>
                 
-                <!-- Цена в Корее -->
+                <!-- Цена в Корее (одна строка) -->
                 <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 6px;">
                     <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена в Корее</div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 15px; font-weight: 600;">🇰🇷 KRW:</span>
-                        <span id="price-krw" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="font-size: 15px; font-weight: 600;">🇺🇸 USD:</span>
-                        <span id="price-usd" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 15px; font-weight: 600;">🇰🇷 KRW / 🇺🇸 USD:</span>
+                        <span id="price-value" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
                     </div>
                 </div>
                 
-                <!-- Расходы/Логистика до КГ -->
+                <!-- Расходы Корея/Логистика -->
                 <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 14px; font-weight: 500;">📦 Расходы/Логистика до КГ:</span>
+                        <span style="font-size: 14px; font-weight: 500;">📦 Расходы Корея/Логистика:</span>
                         <span id="logistics-kg" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">5000 $</span>
                     </div>
                 </div>
@@ -619,9 +608,9 @@
             }
         };
         
-        // Расходы/Логистика до КГ
+        // Расходы Корея/Логистика
         document.getElementById('logistics-kg').onclick = () => {
-            const val = prompt('Расходы/Логистика до КГ ($):', Hub.get('koreaLogistics') || 5000);
+            const val = prompt('Расходы Корея/Логистика ($):', Hub.get('koreaLogistics') || 5000);
             if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
         };
         
@@ -722,7 +711,6 @@
         }
     });
     
-    // Подписка на загрузку страховых данных
     Hub.on('accidentData:loaded', (data) => {
         updateAccidentPanel(data);
         updatePanel();
@@ -731,5 +719,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель со страховыми выплатами загружена v12.0');
+    console.log('[UI] Финальная панель v13.0 загружена');
 })();
