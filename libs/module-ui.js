@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      10.0
-// @description  Финальная версия панели (со страховыми выплатами)
+// @version      11.0
+// @description  Финальная версия панели (с логистикой и страховыми)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -166,7 +166,7 @@
         const accidentTotal = Hub.get('accidentTotal');
         const accidentSpan = mainPanel.querySelector('#accident-value');
         if (accidentSpan) {
-            if (accidentTotal && accidentTotal !== '—') {
+            if (accidentTotal && accidentTotal !== '—' && accidentTotal !== 'загрузка...') {
                 accidentSpan.innerHTML = accidentTotal;
             } else {
                 accidentSpan.innerHTML = '<span style="color:#f97316;">загрузка...</span>';
@@ -177,12 +177,12 @@
         const accidentDetails = Hub.get('accidentDetails');
         const accidentDetailsDiv = mainPanel.querySelector('#accident-details');
         if (accidentDetailsDiv && accidentDetails && accidentDetails.length) {
+            const usdToKrw = Hub.get('usdToKrw') || 1473;
             accidentDetailsDiv.innerHTML = accidentDetails.map((acc, idx) => {
                 const part = acc.partCost || 0;
                 const labor = acc.laborCost || 0;
                 const paint = acc.paintingCost || 0;
                 const totalWon = part + labor + paint;
-                const usdToKrw = Hub.get('usdToKrw') || 1473;
                 const totalUsd = Math.round(totalWon / usdToKrw);
                 return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
                     <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
@@ -193,7 +193,7 @@
                 </div>`;
             }).join('');
             accidentDetailsDiv.style.display = 'block';
-        } else if (accidentDetailsDiv) {
+        } else if (accidentDetailsDiv && accidentDetails && accidentDetails.length === 0) {
             accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
         }
         
@@ -207,6 +207,11 @@
         const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
         const priceUsdSpan = mainPanel.querySelector('#price-usd');
         if (priceUsdSpan) priceUsdSpan.textContent = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
+        
+        // Расходы/Логистика до КГ
+        const logisticsKg = Hub.get('koreaLogistics') || 5000;
+        const logisticsSpan = mainPanel.querySelector('#logistics-kg');
+        if (logisticsSpan) logisticsSpan.textContent = `${formatNumber(logisticsKg)} $`;
         
         // Стоимость авто в EUR
         const euroPrice = Hub.get('selectedEuroPrice');
@@ -366,7 +371,7 @@
                 </div>
                 
                 <!-- Цена в Корее -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 6px;">
                     <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена в Корее</div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                         <span style="font-size: 15px; font-weight: 600;">🇰🇷 KRW:</span>
@@ -375,6 +380,14 @@
                     <div style="display: flex; justify-content: space-between;">
                         <span style="font-size: 15px; font-weight: 600;">🇺🇸 USD:</span>
                         <span id="price-usd" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
+                    </div>
+                </div>
+                
+                <!-- Расходы/Логистика до КГ -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 14px; font-weight: 500;">📦 Расходы/Логистика до КГ:</span>
+                        <span id="logistics-kg" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">5000 $</span>
                     </div>
                 </div>
                 
@@ -564,6 +577,12 @@
             }
         };
         
+        // Расходы/Логистика до КГ
+        document.getElementById('logistics-kg').onclick = () => {
+            const val = prompt('Расходы/Логистика до КГ ($):', Hub.get('koreaLogistics') || 5000);
+            if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
+        };
+        
         // Услуги в Киргизии
         document.getElementById('kirgiz-value').onclick = () => {
             const val = prompt('Услуги в Киргизии ($):', 500);
@@ -660,6 +679,8 @@
             unsafeWindow.EncarPrice.updateDisplay();
         }
     });
+    
+    // Подписка на загрузку страховых данных
     Hub.on('accidentData:loaded', (data) => {
         const accidentSpan = document.getElementById('accident-value');
         if (accidentSpan) {
@@ -675,5 +696,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель со страховыми выплатами загружена v10.0');
+    console.log('[UI] Финальная панель v11.0 загружена');
 })();
