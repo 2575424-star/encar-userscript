@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      9.0
-// @description  Финальная версия панели
+// @version      10.0
+// @description  Финальная версия панели (со страховыми выплатами)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -85,6 +85,15 @@
             background: #d97706;
             transform: scale(1.05);
         }
+        
+        .accident-header {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .accident-header:hover {
+            opacity: 0.8;
+        }
     `);
     
     // ========== ФОРМАТИРОВАНИЕ ==========
@@ -112,7 +121,7 @@
     function updatePanel() {
         if (!mainPanel) return;
         
-        // Марка и модель (увеличенный шрифт 22px)
+        // Марка и модель
         const brand = Hub.get('carBrand') || '—';
         const model = Hub.get('carModel') || '—';
         const modelStr = `${brand} ${model}`.trim();
@@ -121,7 +130,7 @@
             if (titleSpan) titleSpan.textContent = modelStr;
         }
         
-        // Просмотры (белый цвет)
+        // Просмотры
         const views = Hub.get('carViews');
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
@@ -148,10 +157,45 @@
         const mileageSpan = mainPanel.querySelector('#info-mileage');
         if (mileageSpan) mileageSpan.textContent = formatMileage(mileage);
         
-        // VIN (увеличенный шрифт 13px)
+        // VIN
         const vin = Hub.get('carVin');
         const vinSpan = mainPanel.querySelector('#info-vin');
         if (vinSpan) vinSpan.textContent = formatVin(vin);
+        
+        // Страховые выплаты
+        const accidentTotal = Hub.get('accidentTotal');
+        const accidentSpan = mainPanel.querySelector('#accident-value');
+        if (accidentSpan) {
+            if (accidentTotal && accidentTotal !== '—') {
+                accidentSpan.innerHTML = accidentTotal;
+            } else {
+                accidentSpan.innerHTML = '<span style="color:#f97316;">загрузка...</span>';
+            }
+        }
+        
+        // Детали страховых выплат
+        const accidentDetails = Hub.get('accidentDetails');
+        const accidentDetailsDiv = mainPanel.querySelector('#accident-details');
+        if (accidentDetailsDiv && accidentDetails && accidentDetails.length) {
+            accidentDetailsDiv.innerHTML = accidentDetails.map((acc, idx) => {
+                const part = acc.partCost || 0;
+                const labor = acc.laborCost || 0;
+                const paint = acc.paintingCost || 0;
+                const totalWon = part + labor + paint;
+                const usdToKrw = Hub.get('usdToKrw') || 1473;
+                const totalUsd = Math.round(totalWon / usdToKrw);
+                return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
+                    <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
+                    💰 Выплата: ${totalUsd.toLocaleString()} $<br>
+                    🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
+                    🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
+                    🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
+                </div>`;
+            }).join('');
+            accidentDetailsDiv.style.display = 'block';
+        } else if (accidentDetailsDiv) {
+            accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
+        }
         
         // Цена в Корее (KRW)
         const carPriceKrw = Hub.get('carPriceKrw');
@@ -178,7 +222,7 @@
             tpoSpan.innerHTML = tpoValue ? `${formatNumber(tpoValue)} $` : '<span style="color:#f97316;">заполните</span>';
         }
         
-        // Услуги в Киргизии (фиксированная сумма 500$)
+        // Услуги в Киргизии
         const kirgizService = 500;
         const kirgizSpan = mainPanel.querySelector('#kirgiz-value');
         if (kirgizSpan) kirgizSpan.textContent = `${formatNumber(kirgizService)} $`;
@@ -302,6 +346,22 @@
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">🔢 VIN</span>
                         <span id="info-vin" class="clickable" style="font-family: monospace; font-size: 13px; font-weight: 500; cursor: pointer;">—</span>
+                    </div>
+                </div>
+                
+                <!-- Страховые выплаты (раскрывающийся блок) -->
+                <div style="margin-bottom: 10px;">
+                    <div id="accident-header" class="accident-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 6px 10px;">
+                        <span style="color: #94a3b8; font-size: 14px; font-weight: 500;">💸 Страховые выплаты:</span>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="accident-value" style="color: #fbbf24; font-weight: 600; font-size: 14px;">загрузка...</span>
+                            <span id="accident-arrow" style="font-size: 12px; color: #94a3b8;">▼</span>
+                        </div>
+                    </div>
+                    <div id="accident-content" style="display: none; margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 8px;">
+                        <div id="accident-details" style="font-size: 12px; color: #cbd5e1; max-height: 200px; overflow-y: auto;">
+                            Загрузка...
+                        </div>
                     </div>
                 </div>
                 
@@ -453,6 +513,23 @@
         
         // ========== ОБРАБОТЧИКИ КЛИКОВ ==========
         
+        // Раскрывающийся блок страховых выплат
+        const accidentHeader = document.getElementById('accident-header');
+        const accidentContent = document.getElementById('accident-content');
+        const accidentArrow = document.getElementById('accident-arrow');
+        
+        if (accidentHeader && accidentContent && accidentArrow) {
+            accidentHeader.addEventListener('click', () => {
+                if (accidentContent.style.display === 'none') {
+                    accidentContent.style.display = 'block';
+                    accidentArrow.innerHTML = '▲';
+                } else {
+                    accidentContent.style.display = 'none';
+                    accidentArrow.innerHTML = '▼';
+                }
+            });
+        }
+        
         // Курсы валют
         document.getElementById('usd-header').onclick = () => {
             const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5);
@@ -583,9 +660,20 @@
             unsafeWindow.EncarPrice.updateDisplay();
         }
     });
+    Hub.on('accidentData:loaded', (data) => {
+        const accidentSpan = document.getElementById('accident-value');
+        if (accidentSpan) {
+            if (data && data.totalUsd) {
+                accidentSpan.innerHTML = `${data.totalUsd.toLocaleString()} $`;
+            } else if (data && data.count === 0) {
+                accidentSpan.innerHTML = 'Без ДТП';
+            }
+        }
+        updatePanel();
+    });
     
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель загружена v9.0');
+    console.log('[UI] Финальная панель со страховыми выплатами загружена v10.0');
 })();
