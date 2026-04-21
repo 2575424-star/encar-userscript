@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar Photos Module
 // @namespace    http://tampermonkey.net/
-// @version      5.0
+// @version      5.2
 // @description  Поиск фото через генерацию URL
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -15,7 +15,7 @@
 (function() {
     'use strict';
     
-    console.log('[Photos] Модуль загружен v5.0');
+    console.log('[Photos] Модуль загружен v5.2');
     
     if (!unsafeWindow.EncarHub) {
         console.error('[Photos] CoreHub не найден!');
@@ -61,8 +61,7 @@
         }
         
         console.log(`[Photos] CarId: ${carId}`);
-        const generatedUrls = generateAllPhotoUrls(carId);
-        photosList = generatedUrls.slice(0, 16);
+        photosList = generateAllPhotoUrls(carId);
         Hub.set('photosList', photosList);
         
         console.log(`[Photos] Подготовлено ${photosList.length} URL`);
@@ -103,7 +102,7 @@
     function formatVolume(cc) {
         if (!cc) return null;
         const liters = cc / 1000;
-        return Number.isInteger(liters) ? `${liters}.0L (${cc.toLocaleString()}cc)` : `${liters.toFixed(1)}L (${cc.toLocaleString()}cc)`;
+        return Number.isInteger(liters) ? `${liters}.0L` : `${liters.toFixed(1)}L`;
     }
     
     function formatMileage(mileage) {
@@ -150,37 +149,41 @@
         const eurRate = Hub.get('eurRate') || 0;
         const usdtRate = Hub.get('usdtRate') || 0;
         
+        const yearDisplay = month ? `${year}/${month}` : year;
+        
         const reportHtml = `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Коммерческое предложение</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#e0e0e0;padding:20px}
-.toolbar{position:fixed;bottom:20px;right:20px;z-index:1000;display:flex;gap:10px}
-.toolbar button{padding:12px 24px;font-size:14px;font-weight:bold;border:none;border-radius:8px;cursor:pointer}
-.btn-print{background:#2c5f2d;color:white}
-.btn-pdf{background:#1a5276;color:white}
-.page{background:white;width:210mm;min-height:297mm;margin:0 auto 20px auto;padding:15mm;page-break-after:always}
-.header{text-align:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #fbbf24}
-.header h1{color:#0f2a44;font-size:24px}
-.car-info{background:#f8fafc;border-radius:12px;padding:15px;margin-bottom:20px}
-.car-info h3{color:#0f2a44;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px}
-.info-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px}
-.info-label{font-weight:600;color:#475569}
-.price-table{width:100%;border-collapse:collapse;margin-bottom:20px}
-.price-table th,.price-table td{padding:10px;text-align:left;border-bottom:1px solid #e2e8f0}
-.price-table th{background:#f1f5f9}
-.total-row{background:#fef3c7;font-weight:bold}
-.footer{margin-top:20px;text-align:center;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:15px}
-.photos-page{background:white;width:210mm;min-height:297mm;margin:0 auto 20px auto;padding:10mm;page-break-after:always}
-.photos-header{text-align:center;font-size:18px;font-weight:bold;color:#0f2a44;margin-bottom:15px;border-bottom:2px solid #fbbf24}
-.photos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.photo-cell{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;min-height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.photo-cell img{width:100%;height:100%;object-fit:contain}
-.photo-cell.empty{background:#fafafa;border:1px dashed #ccc}
-.page-number{text-align:center;margin-top:8mm;font-size:10px;color:#999}
-@media print{.toolbar{display:none}.page,.photos-page{box-shadow:none;margin:0;padding:0}}
-</style>
+<head>
+    <meta charset="UTF-8">
+    <title>Коммерческое предложение</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Segoe UI',Arial,sans-serif;background:#e0e0e0;padding:20px}
+        .toolbar{position:fixed;bottom:20px;right:20px;z-index:1000;display:flex;gap:10px}
+        .toolbar button{padding:12px 24px;font-size:14px;font-weight:bold;border:none;border-radius:8px;cursor:pointer}
+        .btn-print{background:#2c5f2d;color:white}
+        .btn-pdf{background:#1a5276;color:white}
+        .page{background:white;width:210mm;min-height:297mm;margin:0 auto 20px auto;padding:15mm;page-break-after:always}
+        .header{text-align:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid #fbbf24}
+        .header h1{color:#0f2a44;font-size:24px}
+        .car-info{background:#f8fafc;border-radius:12px;padding:15px;margin-bottom:20px}
+        .car-info h3{color:#0f2a44;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px}
+        .info-row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px}
+        .info-label{font-weight:600;color:#475569}
+        .price-table{width:100%;border-collapse:collapse;margin-bottom:20px}
+        .price-table th,.price-table td{padding:10px;text-align:left;border-bottom:1px solid #e2e8f0}
+        .price-table th{background:#f1f5f9}
+        .total-row{background:#fef3c7;font-weight:bold}
+        .footer{margin-top:20px;text-align:center;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:15px}
+        .photos-page{background:white;width:210mm;min-height:297mm;margin:0 auto 20px auto;padding:10mm;page-break-after:always}
+        .photos-header{text-align:center;font-size:18px;font-weight:bold;color:#0f2a44;margin-bottom:15px;border-bottom:2px solid #fbbf24}
+        .photos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+        .photo-cell{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;min-height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+        .photo-cell img{width:100%;height:100%;object-fit:contain}
+        .photo-cell.empty{background:#fafafa;border:1px dashed #ccc}
+        .page-number{text-align:center;margin-top:8mm;font-size:10px;color:#999}
+        @media print{.toolbar{display:none}.page,.photos-page{box-shadow:none;margin:0;padding:0}}
+    </style>
 </head>
 <body>
 <div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ Печать</button><button class="btn-pdf" onclick="window.print()">📄 Сохранить PDF</button></div>
@@ -189,7 +192,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#e0e0e0;padding:20px}
 <div class="car-info">
 <h3>📋 Информация об автомобиле</h3>
 <div class="info-row"><span class="info-label">Марка/Модель:</span><span>${brand} ${model}</span></div>
-<div class="info-row"><span class="info-label">Год выпуска:</span><span>${month ? `${year}/${month}` : year}</span></div>
+<div class="info-row"><span class="info-label">Год выпуска:</span><span>${yearDisplay}</span></div>
 <div class="info-row"><span class="info-label">Объём двигателя:</span><span>${formatVolume(engineVolume) || '—'}</span></div>
 <div class="info-row"><span class="info-label">Мощность:</span><span>${power ? `${power} л.с.` : '—'}</span></div>
 <div class="info-row"><span class="info-label">Пробег:</span><span>${formatMileage(mileage) || '—'}</span></div>
