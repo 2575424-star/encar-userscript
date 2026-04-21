@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      13.0
-// @description  Финальная версия панели (объединённая цена в Корее)
+// @version      14.0
+// @description  Финальная версия панели (объединённые расходы Киргизии)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -208,9 +208,14 @@
         }
         
         // Расходы Корея/Логистика
-        const logisticsKg = Hub.get('koreaLogistics') || 5000;
-        const logisticsSpan = mainPanel.querySelector('#logistics-kg');
-        if (logisticsSpan) logisticsSpan.textContent = `${formatNumber(logisticsKg)} $`;
+        const koreaLogistics = Hub.get('koreaLogistics') || 5000;
+        const logisticsKoreaSpan = mainPanel.querySelector('#logistics-korea');
+        if (logisticsKoreaSpan) logisticsKoreaSpan.textContent = `${formatNumber(koreaLogistics)} $`;
+        
+        // Расходы Киргизия/Логистика (объединённые)
+        const kirgizLogistics = 2000;
+        const logisticsKirgizSpan = mainPanel.querySelector('#logistics-kirgiz');
+        if (logisticsKirgizSpan) logisticsKirgizSpan.textContent = `${formatNumber(kirgizLogistics)} $`;
         
         // Стоимость авто в EUR
         const euroPrice = Hub.get('selectedEuroPrice');
@@ -225,16 +230,6 @@
         if (tpoSpan) {
             tpoSpan.innerHTML = tpoValue ? `${formatNumber(tpoValue)} $` : '<span style="color:#f97316;">заполните</span>';
         }
-        
-        // Услуги в Киргизии
-        const kirgizService = 500;
-        const kirgizSpan = mainPanel.querySelector('#kirgiz-value');
-        if (kirgizSpan) kirgizSpan.textContent = `${formatNumber(kirgizService)} $`;
-        
-        // Доставка в РФ
-        const deliveryRf = Hub.get('servicesBishkek') || 1200;
-        const deliverySpan = mainPanel.querySelector('#delivery-value');
-        if (deliverySpan) deliverySpan.textContent = `${formatNumber(deliveryRf)} $`;
         
         // Документы РФ
         const docsRf = Hub.get('docsRf') || 80000;
@@ -415,10 +410,18 @@
                 </div>
                 
                 <!-- Расходы Корея/Логистика -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 6px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 14px; font-weight: 500;">📦 Расходы Корея/Логистика:</span>
-                        <span id="logistics-kg" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">5000 $</span>
+                        <span id="logistics-korea" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">5000 $</span>
+                    </div>
+                </div>
+                
+                <!-- Расходы Киргизия/Логистика -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 14px; font-weight: 500;">🏛️ Расходы Киргизия/Логистика:</span>
+                        <span id="logistics-kirgiz" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">2000 $</span>
                     </div>
                 </div>
                 
@@ -438,14 +441,6 @@
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                         <span style="font-size: 14px; font-weight: 500;">🏛️ ТПО:</span>
                         <span id="tpo-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 14px; font-weight: 500;">🛂 Услуги в Киргизии:</span>
-                        <span id="kirgiz-value" class="clickable" style="font-weight: 700; font-size: 15px; color: #fbbf24;">500 $</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="font-size: 14px; font-weight: 500;">🚚 Доставка в РФ:</span>
-                        <span id="delivery-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
                     </div>
                 </div>
                 
@@ -609,25 +604,19 @@
         };
         
         // Расходы Корея/Логистика
-        document.getElementById('logistics-kg').onclick = () => {
+        document.getElementById('logistics-korea').onclick = () => {
             const val = prompt('Расходы Корея/Логистика ($):', Hub.get('koreaLogistics') || 5000);
             if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
         };
         
-        // Услуги в Киргизии
-        document.getElementById('kirgiz-value').onclick = () => {
-            const val = prompt('Услуги в Киргизии ($):', 500);
+        // Расходы Киргизия/Логистика
+        document.getElementById('logistics-kirgiz').onclick = () => {
+            const val = prompt('Расходы Киргизия/Логистика ($):', 2000);
             if (val && !isNaN(parseFloat(val))) {
                 const newVal = parseFloat(val);
-                document.getElementById('kirgiz-value').textContent = `${newVal.toLocaleString()} $`;
-                Hub.set('kirgizService', newVal);
+                document.getElementById('logistics-kirgiz').textContent = `${newVal.toLocaleString()} $`;
+                Hub.set('kirgizLogistics', newVal);
             }
-        };
-        
-        // Доставка в РФ
-        document.getElementById('delivery-value').onclick = () => {
-            const val = prompt('Доставка в РФ ($):', Hub.get('servicesBishkek') || 1200);
-            if (val && !isNaN(parseFloat(val))) Hub.set('servicesBishkek', parseFloat(val));
         };
         
         // Документы РФ
@@ -719,5 +708,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель v13.0 загружена');
+    console.log('[UI] Финальная панель v14.0 загружена');
 })();
