@@ -1,17 +1,21 @@
 // ==UserScript==
-// @name         Encar Photos Module (Clean)
+// @name         Encar Photos Module (с фото)
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  Только кнопка коммерческого предложения (без поиска фото)
+// @version      3.0
+// @description  Коммерческое предложение с фото
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      ci.encar.com
+// @connect      image.encar.com
+// @connect      api.encar.com
 // ==/UserScript==
 
 (function() {
     'use strict';
     
-    console.log('[Photos] Чистая версия загружена (без поиска фото)');
+    console.log('[Photos] Версия с фото загружена');
     
     if (!unsafeWindow.EncarHub) {
         console.error('[Photos] CoreHub не найден!');
@@ -19,10 +23,144 @@
     }
     
     const Hub = unsafeWindow.EncarHub;
+    let photosList = [];
     
-    // Простая функция печати
-    function printReport() {
+    // ========== ПОИСК ФОТО ==========
+    function findCarId() {
+        const urlMatch = window.location.href.match(/carid=(\d+)/);
+        if (urlMatch) return urlMatch[1];
+        if (window.__PRELOADED_STATE__?.cars?.base?.vehicleId) {
+            return window.__PRELOADED_STATE__.cars.base.vehicleId;
+        }
+        return null;
+    }
+    
+    // Поиск фото в DOM
+    function findPhotosInDOM() {
+        const urls = new Set();
+        
+        // Поиск в img
+        document.querySelectorAll('img[src*="ci.encar.com"], img[data-src*="ci.encar.com"]').forEach(img => {
+            let src = img.src || img.getAttribute('data-src');
+            if (src && src.includes('ci.encar.com')) {
+                const cleanUrl = src.split('?')[0];
+                if (cleanUrl.match(/_\d{3}\.jpg$/)) {
+                    urls.add(cleanUrl);
+                }
+            }
+        });
+        
+        // Поиск в скриптах
+        const urlPattern = /(https?:\/\/ci\.encar\.com[^\s"'<>]+_\d{3}\.jpg)/gi;
+        document.querySelectorAll('script').forEach(script => {
+            const matches = script.textContent.match(urlPattern);
+            if (matches) {
+                matches.forEach(url => urls.add(url.split('?')[0]));
+            }
+        });
+        
+        return Array.from(urls);
+    }
+    
+    // Генерация URL по шаблону
+    function generatePhotoUrls(carId) {
+        const urls = [];
+        const baseUrl = `https://ci.encar.com/carpicture/carpicture${carId.slice(-2)}/pic${carId.slice(0,4)}/${carId}_`;
+        
+        for (let i = 1; i <= 20; i++) {
+            const num = String(i).padStart(3, '0');
+            urls.push(`${baseUrl}${num}.jpg`);
+        }
+        return urls;
+    }
+    
+    // Главная функция поиска фото
+    async function findAllPhotos() {
+        console.log('[Photos] Поиск фото...');
+        
+        // Сначала ищем в DOM
+        let photos = findPhotosInDOM();
+        if (photos.length >= 5) {
+            photosList = photos.slice(0, 16);
+            Hub.set('photosList', photosList);
+            console.log(`[Photos] Найдено ${photosList.length} фото в DOM`);
+            return photosList;
+        }
+        
+        // Если не нашли, генерируем по шаблону
+        const carId = findCarId();
+        if (carId) {
+            const generatedUrls = generatePhotoUrls(carId);
+            photosList = generatedUrls.slice(0, 16);
+            Hub.set('photosList', photosList);
+            console.log(`[Photos] Сгенерировано ${photosList.length} URL для carId ${carId}`);
+            return photosList;
+        }
+        
+        photosList = [];
+        Hub.set('photosList', []);
+        return [];
+    }
+    
+    // ========== ГЕНЕРАЦИЯ HTML ФОТО ==========
+    function generatePhotosHTML(photoUrls) {
+        if (!photoUrls.length) {
+            return '<div class="page"><div class="photos-header">📸 Фотографии отсутствуют</div></div>';
+        }
+        
+        let pagesHTML = '';
+        const photosPerPage = 16;
+        const limitedPhotos = photoUrls.slice(0, 16);
+        
+        for (let page = 0; page < limitedPhotos.length; page += photosPerPage) {
+            const pagePhotos = limitedPhotos.slice(page, page + photosPerPage);
+            const pageNumber = Math.floor(page / photosPerPage) + 1;
+            const totalPages = Math.ceil(limitedPhotos.length / photosPerPage);
+            
+            pagesHTML += `<div class="page photos-page">`;
+            pagesHTML += `<div class="photos-header">📸 ФОТОГРАФИИ АВТОМОБИЛЯ (${pageNumber}/${totalPages})</div>`;
+            pagesHTML += `<div class="photos-grid">`;
+            
+            for (let i = 0; i < photosPerPage; i++) {
+                if (i < pagePhotos.length) {
+                    pagesHTML += `<div class="photo-cell"><img src="${pagePhotos[i]}" alt="Фото ${page + i + 1}" loading="lazy" onerror="this.style.opacity='0.3'"></div>`;
+                } else {
+                    pagesHTML += `<div class="photo-cell empty"></div>`;
+                }
+            }
+            
+            pagesHTML += `</div><div class="page-number">${pageNumber}/${totalPages}</div></div>`;
+        }
+        return pagesHTML;
+    }
+    
+    // ========== ФОРМАТИРОВАНИЕ ==========
+    function formatVolume(cc) {
+        if (!cc) return '—';
+        const liters = cc / 1000;
+        return Number.isInteger(liters) ? `${liters}.0L` : `${liters.toFixed(1)}L`;
+    }
+    
+    function formatMileage(mileage) {
+        if (!mileage) return '—';
+        if (mileage >= 10000) return `${(mileage / 10000).toFixed(1)}만 km`;
+        return `${mileage.toLocaleString()} km`;
+    }
+    
+    // ========== ГЕНЕРАЦИЯ ОТЧЁТА ==========
+    async function printReport() {
         console.log('[Photos] Генерация КП...');
+        
+        if (!photosList.length) {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.textContent = '🔍 Поиск фотографий...';
+            loadingDiv.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#1e293b; color:white; padding:15px 25px; border-radius:12px; z-index:10030;';
+            document.body.appendChild(loadingDiv);
+            await findAllPhotos();
+            loadingDiv.remove();
+        }
+        
+        const photosHTML = generatePhotosHTML(photosList);
         
         const brand = Hub.get('carBrand') || '—';
         const model = Hub.get('carModel') || '—';
@@ -49,8 +187,8 @@
         const usdtRate = Hub.get('usdtRate') || 0;
         
         const yearDisplay = month ? `${year}/${month}` : year;
-        const mileageDisplay = mileage ? `${mileage.toLocaleString()} km` : '—';
-        const volumeDisplay = engineVolume ? `${engineVolume/1000}.0L` : '—';
+        const mileageDisplay = formatMileage(mileage);
+        const volumeDisplay = formatVolume(engineVolume);
         
         const reportHtml = `<!DOCTYPE html>
 <html>
@@ -76,7 +214,14 @@
         .price-table th{background:#f1f5f9}
         .total-row{background:#fef3c7;font-weight:bold}
         .footer{margin-top:20px;text-align:center;font-size:10px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:15px}
-        @media print{.toolbar{display:none}.page{box-shadow:none;margin:0;padding:0}}
+        .photos-page{background:white;width:210mm;min-height:297mm;margin:0 auto 20px auto;padding:10mm;page-break-after:always}
+        .photos-header{text-align:center;font-size:18px;font-weight:bold;color:#0f2a44;margin-bottom:15px;border-bottom:2px solid #fbbf24}
+        .photos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+        .photo-cell{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;min-height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+        .photo-cell img{width:100%;height:100%;object-fit:contain}
+        .photo-cell.empty{background:#fafafa;border:1px dashed #ccc}
+        .page-number{text-align:center;margin-top:8mm;font-size:10px;color:#999}
+        @media print{.toolbar{display:none}.page,.photos-page{box-shadow:none;margin:0;padding:0}}
     </style>
 </head>
 <body>
@@ -94,7 +239,7 @@
 <div class="info-row"><span class="info-label">Просмотры:</span><span>${views?.toLocaleString() || '—'}</span></div>
 </div>
 <table class="price-table">
-<thead><tr><th>Статья расходов</th><th>Сумма</th><tr></thead>
+<thead><tr><th>Статья расходов</th><th>Сумма</th></tr></thead>
 <tbody>
 <tr><td>🚗 Стоимость авто (USD)</td><td>${priceUsd.toLocaleString()} $</td></tr>
 <tr><td>💰 Стоимость (EUR)</td><td>${typeof euroPrice === 'number' ? euroPrice.toLocaleString() : euroPrice} €</td></tr>
@@ -109,6 +254,7 @@
 </table>
 <div class="footer"><p>Курс USD: ${usdRate.toFixed(2)} ₽ | EUR: ${eurRate.toFixed(2)} ₽ | USDT: ${usdtRate.toFixed(2)} ₽</p><p>* Данное предложение носит информационный характер и не является публичной офертой.</p></div>
 </div>
+${photosHTML}
 </body>
 </html>`;
         
@@ -117,10 +263,12 @@
         printWindow.document.close();
     }
     
-    // Экспорт только функции печати
+    // Экспорт
     unsafeWindow.EncarPhotos = { 
-        print: printReport
+        print: printReport,
+        find: findAllPhotos,
+        getPhotos: () => photosList
     };
     
-    console.log('[Photos] Чистая версия готова, кнопка КП работает');
+    console.log('[Photos] Версия с фото готова');
 })();
