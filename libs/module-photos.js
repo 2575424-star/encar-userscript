@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Photos Module
 // @namespace    http://tampermonkey.net/
-// @version      5.2
-// @description  Поиск фото через генерацию URL
+// @version      6.0
+// @description  Поиск фото через генерацию URL + периодическое сканирование
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        GM_xmlhttpRequest
@@ -15,7 +15,7 @@
 (function() {
     'use strict';
     
-    console.log('[Photos] Модуль загружен v5.2');
+    console.log('[Photos] Модуль загружен v6.0');
     
     if (!unsafeWindow.EncarHub) {
         console.error('[Photos] CoreHub не найден!');
@@ -24,7 +24,11 @@
     
     const Hub = unsafeWindow.EncarHub;
     let photosList = [];
+    let scanInterval = null;
+    let allFoundUrls = new Set();
+    let isScanning = true;
     
+    // Поиск carId
     function findCarId() {
         const urlMatch = window.location.href.match(/carid=(\d+)/);
         if (urlMatch) return urlMatch[1];
@@ -33,24 +37,66 @@
             return window.__PRELOADED_STATE__.cars.base.vehicleId;
         }
         
+        const scripts = document.querySelectorAll('script');
+        for (const script of scripts) {
+            const match = script.textContent.match(/vehicleId["']?\s*:\s*["']?(\d+)/);
+            if (match) return match[1];
+        }
+        
         return null;
     }
     
-    function generateAllPhotoUrls(carId) {
-        const urls = [];
-        const baseUrl = `https://ci.encar.com/carpicture/carpicture${carId.slice(-2)}/pic${carId.slice(0,4)}/${carId}_`;
-        
-        for (let i = 1; i <= 30; i++) {
-            const num = String(i).padStart(3, '0');
-            urls.push(`${baseUrl}${num}.jpg`);
-        }
-        
-        console.log(`[Photos] Сгенерировано ${urls.length} URL`);
-        return urls;
+    // Очистка URL
+    function getCleanImageUrl(url) {
+        if (!url) return url;
+        return url.split('?')[0];
     }
     
+    // Проверка существования фото
+    function checkPhotoExists(url) {
+        return new Promise((resolve) => {
+            const cleanUrl = getCleanImageUrl(url);
+            GM_xmlhttpRequest({
+                method: 'HEAD',
+                url: cleanUrl,
+                timeout: 5000,
+                onload: function(response) {
+                    resolve(response.status === 200 || response.status === 0);
+                },
+                onerror: function() { resolve(false); },
+                ontimeout: function() { resolve(false); }
+            });
+        });
+    }
+    
+    // Сканирование одного диапазона URL
+    async function scanPhotoRange(carId, start, end) {
+        const baseUrl = `https://ci.encar.com/carpicture/carpicture${carId.slice(-2)}/pic${carId.slice(0,4)}/${carId}_`;
+        const newPhotos = [];
+        
+        for (let i = start; i <= end; i++) {
+            const num = String(i).padStart(3, '0');
+            const url = `${baseUrl}${num}.jpg`;
+            
+            if (!allFoundUrls.has(url)) {
+                const exists = await checkPhotoExists(url);
+                if (exists) {
+                    allFoundUrls.add(url);
+                    newPhotos.push(url);
+                    console.log(`[Photos] ✅ Найдено фото ${allFoundUrls.size}: ${num}.jpg`);
+                }
+            }
+            
+            // Небольшая задержка между запросами
+            await new Promise(r => setTimeout(r, 100));
+        }
+        
+        return newPhotos;
+    }
+    
+    // Основная функция поиска всех фото (с периодическим сканированием)
     async function findAllPhotos() {
-        console.log('[Photos] Поиск фото...');
+        console.log('[Photos] Начало поиска...');
         
         const carId = findCarId();
         if (!carId) {
@@ -61,13 +107,59 @@
         }
         
         console.log(`[Photos] CarId: ${carId}`);
-        photosList = generateAllPhotoUrls(carId);
-        Hub.set('photosList', photosList);
         
-        console.log(`[Photos] Подготовлено ${photosList.length} URL`);
+        // Останавливаем предыдущий интервал, если есть
+        if (scanInterval) {
+            clearInterval(scanInterval);
+            scanInterval = null;
+        }
+        
+        // Сбрасываем найденные URL
+        allFoundUrls.clear();
+        isScanning = true;
+        
+        // Первичное сканирование (первые 16)
+        const initialPhotos = await scanPhotoRange(carId, 1, 16);
+        initialPhotos.forEach(url => allFoundUrls.add(url));
+        
+        photosList = Array.from(allFoundUrls);
+        Hub.set('photosList', photosList);
+        console.log(`[Photos] Первичное сканирование: ${photosList.length} фото`);
+        
+        // Если нашли меньше 16, запускаем периодическое сканирование
+        if (photosList.length < 16 && isScanning) {
+            console.log(`[Photos] Найдено только ${photosList.length}/16, запускаем периодическое сканирование...`);
+            
+            let currentRange = 17;
+            
+            scanInterval = setInterval(async () => {
+                if (!isScanning) return;
+                
+                console.log(`[Photos] Периодическое сканирование: проверяем фото ${currentRange}...`);
+                
+                const newPhotos = await scanPhotoRange(carId, currentRange, currentRange + 4);
+                if (newPhotos.length > 0) {
+                    photosList = Array.from(allFoundUrls);
+                    Hub.set('photosList', photosList);
+                    console.log(`[Photos] Теперь найдено ${photosList.length} фото`);
+                }
+                
+                currentRange += 5;
+                
+                // Если набрали 16 фото или дошли до 50, останавливаем
+                if (photosList.length >= 16 || currentRange > 50) {
+                    console.log(`[Photos] Останавливаем сканирование. Найдено ${photosList.length} фото`);
+                    clearInterval(scanInterval);
+                    scanInterval = null;
+                    isScanning = false;
+                }
+            }, 2000); // Каждые 2 секунды
+        }
+        
         return photosList;
     }
     
+    // Генерация HTML для отчёта
     function generatePhotosHTML(photoUrls) {
         if (!photoUrls.length) {
             return '<div class="page"><div class="photos-header">📸 Фотографии отсутствуют</div></div>';
@@ -116,7 +208,7 @@
         
         if (!photosList.length) {
             const loadingDiv = document.createElement('div');
-            loadingDiv.textContent = '🔍 Подготовка фотографий...';
+            loadingDiv.textContent = '🔍 Поиск фотографий...';
             loadingDiv.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#1e293b; color:white; padding:15px 25px; border-radius:12px; z-index:10030;';
             document.body.appendChild(loadingDiv);
             await findAllPhotos();
@@ -224,9 +316,24 @@ ${photosHTML}
         printWindow.document.close();
     }
     
-    unsafeWindow.EncarPhotos = { print: printReport, find: findAllPhotos, getPhotos: () => photosList };
+    unsafeWindow.EncarPhotos = { 
+        print: printReport, 
+        find: findAllPhotos, 
+        getPhotos: () => photosList,
+        stopScan: () => {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+                isScanning = false;
+                console.log('[Photos] Сканирование остановлено');
+            }
+        }
+    };
     
+    // Автоматический запуск
     setTimeout(() => {
-        findAllPhotos().then(p => console.log(`[Photos] Готово ${p.length} URL`));
+        findAllPhotos().then(p => console.log(`[Photos] Готово ${p.length} фото`));
     }, 2000);
+    
+    console.log('[Photos] Модуль загружен v6.0 (с периодическим сканированием)');
 })();
