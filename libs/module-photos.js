@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Photos Module
 // @namespace    http://tampermonkey.net/
-// @version      3.1
-// @description  Поиск фото и генерация отчёта (полная копия алгоритма из вашего скрипта)
+// @version      3.3
+// @description  Поиск фото и генерация отчёта (стабильная версия)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        GM_xmlhttpRequest
@@ -23,27 +23,15 @@
     const Hub = unsafeWindow.EncarHub;
     let photosList = [];
     
-    // ========== ТОЧНАЯ КОПИЯ АЛГОРИТМА ИЗ ВАШЕГО СКРИПТА ==========
-    
-    // Очистка URL от параметров
-    function getCleanImageUrl(url) {
-        if (!url) return url;
-        let cleanUrl = url.split('?')[0];
-        cleanUrl = cleanUrl.replace(/_[a-z]+\.jpg$/i, '.jpg');
-        cleanUrl = cleanUrl.replace(/-\d+x\d+\.jpg$/i, '.jpg');
-        return cleanUrl;
-    }
-    
-    // Поиск carId (как в вашем скрипте)
+    // ========== ПОИСК CARID ==========
     function findCarId() {
         const urlMatch = window.location.href.match(/carid=(\d+)/);
         if (urlMatch) return urlMatch[1];
         
         if (window.__PRELOADED_STATE__) {
             const state = window.__PRELOADED_STATE__;
-            if (state.cars && state.cars.base && state.cars.base.vehicleId) {
-                return state.cars.base.vehicleId;
-            }
+            if (state.cars?.base?.vehicleId) return state.cars.base.vehicleId;
+            if (state.cars?.detail?.vehicleId) return state.cars.detail.vehicleId;
             if (state.vehicleId) return state.vehicleId;
         }
         
@@ -57,14 +45,14 @@
         return null;
     }
     
-    // Проверка существования фото (ТОЧНО КАК В ВАШЕМ СКРИПТЕ)
-    async function checkPhotoExists(url) {
+    // ========== ПРОВЕРКА СУЩЕСТВОВАНИЯ ФОТО ==========
+    function checkPhotoExists(url) {
         return new Promise((resolve) => {
-            const cleanUrl = getCleanImageUrl(url);
+            const cleanUrl = url.split('?')[0];
             GM_xmlhttpRequest({
                 method: 'HEAD',
                 url: cleanUrl,
-                timeout: 5000,
+                timeout: 10000,
                 onload: function(response) {
                     resolve(response.status === 200 || response.status === 0);
                 },
@@ -78,14 +66,13 @@
         });
     }
     
-    // Поиск всех фото через сканирование (ТОЧНО КАК В ВАШЕМ СКРИПТЕ)
+    // ========== СКАНИРОВАНИЕ ФОТО ==========
     async function findAllPhotosByScan(carId) {
         console.log(`[Photos] Сканирование фото для carId: ${carId}`);
         
         const foundPhotos = [];
         const baseUrl = `https://ci.encar.com/carpicture/carpicture${carId.slice(-2)}/pic${carId.slice(0,4)}/${carId}_`;
         
-        // Сканируем с 001 до 30 (как в вашем скрипте)
         for (let i = 1; i <= 30; i++) {
             const num = String(i).padStart(3, '0');
             const testUrl = `${baseUrl}${num}.jpg`;
@@ -96,67 +83,30 @@
                 console.log(`[Photos] ✅ Найдено фото ${foundPhotos.length}: ${num}.jpg`);
             }
             
-            // Задержка 200 мс (КАК В ВАШЕМ СКРИПТЕ)
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 300));
         }
         
         console.log(`[Photos] Всего найдено: ${foundPhotos.length}`);
         return foundPhotos;
     }
     
-    // Поиск фото через API (как в вашем скрипте)
-    async function fetchPhotosFromAPI(carId) {
-        return new Promise((resolve) => {
-            const apiUrl = `https://api.encar.com/v1/readside/vehicle/${carId}`;
-            
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: apiUrl,
-                timeout: 5000,
-                onload: function(response) {
-                    if (response.status === 200 && response.response) {
-                        try {
-                            const data = JSON.parse(response.response);
-                            if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-                                const photos = data.photos.map(p => p.path).filter(Boolean);
-                                console.log(`[Photos] Через API найдено: ${photos.length}`);
-                                resolve(photos);
-                                return;
-                            }
-                        } catch(e) {}
-                    }
-                    resolve([]);
-                },
-                onerror: function() {
-                    resolve([]);
-                }
-            });
-        });
-    }
-    
-    // Поиск фото в DOM (как в вашем скрипте)
+    // ========== ПОИСК ФОТО В DOM ==========
     function findPhotosInDOM() {
         const urls = new Set();
         
-        const images = document.querySelectorAll('img[src*="ci.encar.com"], img[data-src*="ci.encar.com"]');
-        images.forEach(img => {
+        document.querySelectorAll('img[src*="ci.encar.com"], img[data-src*="ci.encar.com"]').forEach(img => {
             let src = img.src || img.getAttribute('data-src');
             if (src && src.includes('ci.encar.com')) {
-                const cleanUrl = getCleanImageUrl(src);
+                const cleanUrl = src.split('?')[0];
                 urls.add(cleanUrl);
             }
         });
         
-        const scripts = document.querySelectorAll('script');
         const urlPattern = /(https?:\/\/ci\.encar\.com[^\s"'<>]+\.jpg)/gi;
-        scripts.forEach(script => {
-            const content = script.textContent;
-            const matches = content.match(urlPattern);
+        document.querySelectorAll('script').forEach(script => {
+            const matches = script.textContent.match(urlPattern);
             if (matches) {
-                matches.forEach(url => {
-                    const cleanUrl = getCleanImageUrl(url);
-                    urls.add(cleanUrl);
-                });
+                matches.forEach(url => urls.add(url.split('?')[0]));
             }
         });
         
@@ -165,9 +115,9 @@
         return result;
     }
     
-    // ГЛАВНАЯ ФУНКЦИЯ (ТОЧНАЯ КОПИЯ ВАШЕГО АЛГОРИТМА)
+    // ========== ГЛАВНАЯ ФУНКЦИЯ ==========
     async function findAllPhotos() {
-        console.log('[Photos] Начало поиска (алгоритм из вашего скрипта)...');
+        console.log('[Photos] Начало поиска...');
         
         // 1. Сначала пробуем DOM
         let photos = findPhotosInDOM();
@@ -182,27 +132,18 @@
         console.log(`[Photos] CarId: ${carId}`);
         
         if (carId) {
-            // 2. Пробуем API
-            const apiPhotos = await fetchPhotosFromAPI(carId);
-            if (apiPhotos.length >= 5) {
-                console.log(`[Photos] Используем API: ${apiPhotos.length} фото`);
-                photosList = apiPhotos.slice(0, 16);
-                Hub.set('photosList', photosList);
-                return photosList;
-            }
-            
-            // 3. Основной метод - сканирование (ТОЧНО КАК В ВАШЕМ СКРИПТЕ)
+            // 2. Сканирование по шаблону
             console.log('[Photos] Запуск сканирования по шаблону...');
             const scannedPhotos = await findAllPhotosByScan(carId);
             if (scannedPhotos.length >= 3) {
-                console.log(`[Photos] Используем сканирование: ${scannedPhotos.length} фото`);
+                console.log(`[Photos] Найдено через сканирование: ${scannedPhotos.length} фото`);
                 photosList = scannedPhotos.slice(0, 16);
                 Hub.set('photosList', photosList);
                 return photosList;
             }
         }
         
-        // 4. Если ничего не нашли
+        // 3. Если ничего не нашли
         if (photos.length > 0) {
             console.log(`[Photos] Используем DOM (остаток): ${photos.length} фото`);
             photosList = photos.slice(0, 16);
@@ -216,20 +157,7 @@
         return [];
     }
     
-    // ========== ФОРМАТИРОВАНИЕ ДЛЯ ОТЧЁТА ==========
-    
-    function formatVolume(cc) {
-        if (!cc) return null;
-        const liters = cc / 1000;
-        return Number.isInteger(liters) ? `${liters}.0L (${cc.toLocaleString()}cc)` : `${liters.toFixed(1)}L (${cc.toLocaleString()}cc)`;
-    }
-    
-    function formatMileage(mileage) {
-        if (!mileage) return null;
-        if (mileage >= 10000) return `${(mileage / 10000).toFixed(1)}만 km`;
-        return `${mileage.toLocaleString()} km`;
-    }
-    
+    // ========== ГЕНЕРАЦИЯ HTML ДЛЯ ОТЧЁТА ==========
     function generatePhotosHTML(photoUrls) {
         if (!photoUrls.length) {
             return '<div class="page"><div class="photos-header">📸 Фотографии отсутствуют</div></div>';
@@ -265,6 +193,20 @@
         return pagesHTML;
     }
     
+    // ========== ФОРМАТИРОВАНИЕ ==========
+    function formatVolume(cc) {
+        if (!cc) return null;
+        const liters = cc / 1000;
+        return Number.isInteger(liters) ? `${liters}.0L (${cc.toLocaleString()}cc)` : `${liters.toFixed(1)}L (${cc.toLocaleString()}cc)`;
+    }
+    
+    function formatMileage(mileage) {
+        if (!mileage) return null;
+        if (mileage >= 10000) return `${(mileage / 10000).toFixed(1)}만 km`;
+        return `${mileage.toLocaleString()} km`;
+    }
+    
+    // ========== ПЕЧАТЬ ОТЧЁТА ==========
     async function printReport() {
         console.log('[Photos] Генерация коммерческого предложения...');
         
@@ -408,5 +350,5 @@
         });
     }, 2000);
     
-    console.log('[Photos] Модуль загружен (версия 3.1)');
+    console.log('[Photos] Модуль загружен (версия 3.3)');
 })();
