@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Fixed)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Интерфейсная панель с работающим меню цены
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -191,7 +191,7 @@
             <div style="display:flex; gap:8px; margin-top:12px;"><button id="price-apply-auto" style="background:#fbbf24; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:bold;">Применить</button><button id="price-cancel-auto" style="background:#475569; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; color:white;">Отмена</button></div>
         `;
         
-        // Обработчики
+        // Обработчики для выпадающих списков
         const brandSelect = document.getElementById('price-brand-select');
         const modelSelect = document.getElementById('price-model-select');
         const engineSelect = document.getElementById('price-engine-select');
@@ -269,6 +269,36 @@
                 priceArrow.innerHTML = '▼';
             };
         }
+    }
+    
+    // Привязка обработчика к цене
+    function attachPriceHandler() {
+        const priceSpan = document.getElementById('encar-price-value');
+        const priceContent = document.getElementById('price-content');
+        const priceArrow = document.getElementById('price-arrow');
+        
+        if (priceSpan && priceContent && priceArrow && !priceSpan._handlerAttached) {
+            priceSpan._handlerAttached = true;
+            priceSpan.style.cursor = 'pointer';
+            priceSpan.style.textDecoration = 'underline';
+            priceSpan.style.color = '#fbbf24';
+            
+            priceSpan.onclick = (e) => {
+                e.stopPropagation();
+                if (priceContent.style.display === 'none') {
+                    priceContent.style.display = 'block';
+                    priceArrow.innerHTML = '▲';
+                    updatePriceContentDisplay();
+                } else {
+                    priceContent.style.display = 'none';
+                    priceArrow.innerHTML = '▼';
+                }
+            };
+            
+            console.log('[UI] Обработчик цены привязан');
+            return true;
+        }
+        return false;
     }
     
     // Создание панели
@@ -412,24 +442,6 @@
             });
         }
         
-        // Обработчик клика по цене
-        const priceSpan = document.getElementById('encar-price-value');
-        const priceContent = document.getElementById('price-content');
-        const priceArrow = document.getElementById('price-arrow');
-        
-        if (priceSpan && priceContent && priceArrow) {
-            priceSpan.onclick = () => {
-                if (priceContent.style.display === 'none') {
-                    priceContent.style.display = 'block';
-                    priceArrow.innerHTML = '▲';
-                    updatePriceContentDisplay();
-                } else {
-                    priceContent.style.display = 'none';
-                    priceArrow.innerHTML = '▼';
-                }
-            };
-        }
-        
         // Обработчики для редактирования
         const powerSpan = mainPanel.querySelector('#info-power');
         if (powerSpan) {
@@ -545,6 +557,9 @@
         }
         
         updatePanel();
+        
+        // Привязываем обработчик цены после создания панели
+        setTimeout(() => attachPriceHandler(), 100);
     }
     
     // Подписки на события
@@ -554,10 +569,25 @@
         if (document.getElementById('price-content')?.style.display === 'block') {
             updatePriceContentDisplay();
         }
+        attachPriceHandler();
+    });
+    
+    // Наблюдатель для повторной привязки обработчика (на случай, если DOM изменится)
+    const observer = new MutationObserver(() => {
+        attachPriceHandler();
     });
     
     // Запуск
     createPanel();
+    
+    // Запускаем наблюдатель после создания панели
+    setTimeout(() => {
+        const panel = document.getElementById('encar-combined-panel');
+        if (panel) {
+            observer.observe(panel, { childList: true, subtree: true });
+        }
+        attachPriceHandler();
+    }, 500);
     
     console.log('[UI] Модуль загружен (с работающим меню цены)');
 })();
