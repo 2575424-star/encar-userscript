@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Fixed)
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Интерфейсная панель с работающим меню цены
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -572,7 +572,7 @@
         attachPriceHandler();
     });
     
-    // Наблюдатель для повторной привязки обработчика (на случай, если DOM изменится)
+    // Наблюдатель для повторной привязки обработчика
     const observer = new MutationObserver(() => {
         attachPriceHandler();
     });
@@ -589,5 +589,4 @@
         attachPriceHandler();
     }, 500);
     
-    console.log('[UI] Модуль загружен (с работающим меню цены)');
-})();
+    console.log('[UI] Модуль загружен (
