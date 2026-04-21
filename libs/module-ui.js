@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      7.0
-// @description  Финальная версия панели (увеличенные курсы, просмотры, зелёная кнопка)
+// @version      8.0
+// @description  Финальная версия панели (новая структура расходов)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -121,7 +121,7 @@
             if (titleSpan) titleSpan.textContent = modelStr;
         }
         
-        // Просмотры (увеличенный шрифт)
+        // Просмотры
         const views = Hub.get('carViews');
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
@@ -153,35 +153,59 @@
         const vinSpan = mainPanel.querySelector('#info-vin');
         if (vinSpan) vinSpan.textContent = formatVin(vin);
         
-        // Цены
+        // Цена в Корее (KRW)
         const carPriceKrw = Hub.get('carPriceKrw');
         const priceKrwSpan = mainPanel.querySelector('#price-krw');
         if (priceKrwSpan) priceKrwSpan.textContent = carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—';
         
+        // Цена в USD
         const usdToKrw = Hub.get('usdToKrw') || 1473;
         const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
         const priceUsdSpan = mainPanel.querySelector('#price-usd');
         if (priceUsdSpan) priceUsdSpan.textContent = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
         
+        // Стоимость авто в EUR
         const euroPrice = Hub.get('selectedEuroPrice');
         const priceEuroSpan = mainPanel.querySelector('#price-euro');
         if (priceEuroSpan) {
             priceEuroSpan.textContent = euroPrice ? `${formatNumber(euroPrice)} €` : '—';
         }
         
-        // Расходы
+        // ТПО
         const tpoValue = Hub.get('calculatedTpo');
         const tpoSpan = mainPanel.querySelector('#tpo-value');
         if (tpoSpan) {
             tpoSpan.innerHTML = tpoValue ? `${formatNumber(tpoValue)} $` : '<span style="color:#f97316;">заполните</span>';
         }
         
+        // Услуги в Киргизии (фиксированная сумма 500$)
+        const kirgizService = 500;
+        const kirgizSpan = mainPanel.querySelector('#kirgiz-value');
+        if (kirgizSpan) kirgizSpan.textContent = `${formatNumber(kirgizService)} $`;
+        
+        // Доставка в РФ (было servicesBishkek)
+        const deliveryRf = Hub.get('servicesBishkek') || 1200;
+        const deliverySpan = mainPanel.querySelector('#delivery-value');
+        if (deliverySpan) deliverySpan.textContent = `${formatNumber(deliveryRf)} $`;
+        
+        // Документы РФ
+        const docsRf = Hub.get('docsRf') || 80000;
+        const docsSpan = mainPanel.querySelector('#docs-value');
+        if (docsSpan) docsSpan.textContent = `${formatNumber(docsRf)} ₽`;
+        
+        // Наши услуги
+        const ourServices = Hub.get('ourServices') || 250000;
+        const ourSpan = mainPanel.querySelector('#our-value');
+        if (ourSpan) ourSpan.textContent = `${formatNumber(ourServices)} ₽`;
+        
+        // Утильсбор
         const utilizationFee = Hub.get('utilizationFee');
         const utilSpan = mainPanel.querySelector('#util-value');
         if (utilSpan) {
             utilSpan.innerHTML = utilizationFee ? `${formatNumber(utilizationFee)} ₽` : '<span style="color:#f97316;">заполните</span>';
         }
         
+        // Итоговая стоимость
         const totalPrice = Hub.get('totalPrice') || 0;
         const totalSpan = mainPanel.querySelector('#total-price');
         if (totalSpan) totalSpan.textContent = `${formatNumber(totalPrice)} ₽`;
@@ -189,24 +213,7 @@
         const collapsedTotalSpan = mainPanel.querySelector('#collapsed-total-price');
         if (collapsedTotalSpan) collapsedTotalSpan.textContent = `${formatNumber(totalPrice)} ₽`;
         
-        // Редактируемые расходы
-        const koreaLogistics = Hub.get('koreaLogistics') || 4000;
-        const logisticsSpan = mainPanel.querySelector('#logistics-value');
-        if (logisticsSpan) logisticsSpan.textContent = `${formatNumber(koreaLogistics)} $`;
-        
-        const servicesBishkek = Hub.get('servicesBishkek') || 1200;
-        const servicesSpan = mainPanel.querySelector('#services-value');
-        if (servicesSpan) servicesSpan.textContent = `${formatNumber(servicesBishkek)} $`;
-        
-        const docsRf = Hub.get('docsRf') || 80000;
-        const docsSpan = mainPanel.querySelector('#docs-value');
-        if (docsSpan) docsSpan.textContent = `${formatNumber(docsRf)} ₽`;
-        
-        const ourServices = Hub.get('ourServices') || 250000;
-        const ourSpan = mainPanel.querySelector('#our-value');
-        if (ourSpan) ourSpan.textContent = `${formatNumber(ourServices)} ₽`;
-        
-        // Курсы валют (увеличенный шрифт)
+        // Курсы валют
         const usdRate = Hub.get('usdRate') || 0;
         const usdHeader = mainPanel.querySelector('#usd-header');
         if (usdHeader) usdHeader.textContent = `🇺🇸 ${usdRate.toFixed(2)}`;
@@ -244,7 +251,7 @@
             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
             border: 1px solid rgba(255,255,255,0.1) !important;
             font-size: 13px !important;
-            width: 340px !important;
+            width: 360px !important;
             backdrop-filter: blur(8px) !important;
             cursor: move;
             user-select: none;
@@ -298,64 +305,67 @@
                     </div>
                 </div>
                 
-                <!-- Цена авто -->
+                <!-- Цена в Корее -->
                 <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
-                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена авто</div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена в Корее</div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 13px;">🇰🇷 KRW:</span>
-                        <span id="price-krw" style="color: #fbbf24; font-weight: 600; font-size: 13px;">—</span>
+                        <span style="font-size: 15px; font-weight: 600;">🇰🇷 KRW:</span>
+                        <span id="price-krw" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
                     </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 15px; font-weight: 600;">🇺🇸 USD:</span>
+                        <span id="price-usd" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
+                    </div>
+                </div>
+                
+                <!-- Таможня Киргизия -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">🏛️ Таможня Киргизия</div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 13px;">🇺🇸 USD:</span>
-                        <span id="price-usd" style="color: #fbbf24; font-weight: 600; font-size: 13px;">—</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 13px;">🇪🇺 EUR:</span>
+                        <span style="font-size: 14px; font-weight: 500;">💰 Стоимость авто (EUR):</span>
                         <div>
-                            <span id="price-euro" class="clickable" style="color: #fbbf24; font-weight: 700; font-size: 14px; text-decoration: underline;">—</span>
+                            <span id="price-euro" class="clickable" style="color: #fbbf24; font-weight: 700; font-size: 15px; text-decoration: underline;">—</span>
                             <span id="price-arrow" style="margin-left: 3px; font-size: 9px; color: #94a3b8;">▼</span>
                         </div>
                     </div>
                     <div id="price-content" style="display: none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08);">
                         <div id="price-content-inner" style="font-size: 11px;">Загрузка...</div>
                     </div>
-                </div>
-                
-                <!-- ТПО и Утильсбор -->
-                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                    <span style="color: #94a3b8; font-size: 14px; font-weight: 500;">🏛️ ТПО</span>
-                    <span id="tpo-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <span style="color: #94a3b8; font-size: 14px; font-weight: 500;">♻️ Утильсбор</span>
-                    <span id="util-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
-                </div>
-                
-                <!-- Расходы -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; margin-bottom: 8px;">
-                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">📋 Расходы</div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="font-size: 16px; font-weight: 600;">📦 Корея + логистика</span>
-                        <span id="logistics-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 14px; font-weight: 500;">🏛️ ТПО:</span>
+                        <span id="tpo-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="font-size: 16px; font-weight: 600;">🚚 Услуги Бишкек + доставка</span>
-                        <span id="services-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="font-size: 16px; font-weight: 600;">📄 Документы РФ</span>
-                        <span id="docs-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 14px; font-weight: 500;">🛂 Услуги в Киргизии:</span>
+                        <span id="kirgiz-value" class="clickable" style="font-weight: 700; font-size: 15px; color: #fbbf24;">500 $</span>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="font-size: 16px; font-weight: 600;">🤝 Наши услуги</span>
-                        <span id="our-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
+                        <span style="font-size: 14px; font-weight: 500;">🚚 Доставка в РФ:</span>
+                        <span id="delivery-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
+                    </div>
+                </div>
+                
+                <!-- Расходы в РФ -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">📋 Расходы в РФ</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 14px; font-weight: 500;">📄 Документы РФ:</span>
+                        <span id="docs-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="font-size: 14px; font-weight: 500;">🤝 Наши услуги:</span>
+                        <span id="our-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 14px; font-weight: 500;">♻️ Утильсбор:</span>
+                        <span id="util-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
                     </div>
                 </div>
                 
                 <!-- Итого -->
                 <div style="border-top: 2px solid #fbbf24; padding-top: 8px; margin-top: 4px;">
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <span style="font-weight: 700; color: #fbbf24; font-size: 18px;">💰 ИТОГО</span>
+                        <span style="font-weight: 700; color: #fbbf24; font-size: 18px;">💰 ИТОГО:</span>
                         <span id="total-price" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0 ₽</span>
                     </div>
                 </div>
@@ -426,7 +436,7 @@
                 if (isCollapsed) {
                     fullContent.style.display = 'block';
                     collapsedContent.style.display = 'none';
-                    mainPanel.style.width = '340px';
+                    mainPanel.style.width = '360px';
                     mainPanel.style.padding = '12px 16px';
                     collapseBtn.innerHTML = '−';
                     isCollapsed = false;
@@ -476,28 +486,45 @@
                 setTimeout(() => span.textContent = orig, 1500);
             }
         };
-        document.getElementById('logistics-value').onclick = () => {
-            const val = prompt('Расходы Корея + логистика ($):', Hub.get('koreaLogistics') || 4000);
-            if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
+        
+        // Услуги в Киргизии (фиксированная сумма 500$)
+        document.getElementById('kirgiz-value').onclick = () => {
+            const val = prompt('Услуги в Киргизии ($):', 500);
+            if (val && !isNaN(parseFloat(val))) {
+                const newVal = parseFloat(val);
+                document.getElementById('kirgiz-value').textContent = `${newVal.toLocaleString()} $`;
+                // Можно сохранить в Hub, если нужно
+                Hub.set('kirgizService', newVal);
+            }
         };
-        document.getElementById('services-value').onclick = () => {
-            const val = prompt('Услуги Бишкек + доставка ($):', Hub.get('servicesBishkek') || 1200);
+        
+        // Доставка в РФ
+        document.getElementById('delivery-value').onclick = () => {
+            const val = prompt('Доставка в РФ ($):', Hub.get('servicesBishkek') || 1200);
             if (val && !isNaN(parseFloat(val))) Hub.set('servicesBishkek', parseFloat(val));
         };
+        
+        // Документы РФ
         document.getElementById('docs-value').onclick = () => {
             const val = prompt('Документы РФ (₽):', Hub.get('docsRf') || 80000);
             if (val && !isNaN(parseFloat(val))) Hub.set('docsRf', parseFloat(val));
         };
+        
+        // Наши услуги
         document.getElementById('our-value').onclick = () => {
             const val = prompt('Наши услуги (₽):', Hub.get('ourServices') || 250000);
             if (val && !isNaN(parseFloat(val))) Hub.set('ourServices', parseFloat(val));
         };
+        
+        // ТПО
         document.getElementById('tpo-value').onclick = () => {
             const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || '';
             const val = prompt('ТПО в USD (оставьте пустым для авто):', current);
             if (val === '') Hub.set('manualTpo', null);
             else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val));
         };
+        
+        // Утильсбор
         document.getElementById('util-value').onclick = () => {
             const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || '';
             const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current);
@@ -561,5 +588,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель загружена v7.0');
+    console.log('[UI] Панель с новой структурой загружена v8.0');
 })();
