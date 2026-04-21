@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Photos Module
 // @namespace    http://tampermonkey.net/
-// @version      6.0
-// @description  Поиск фото через генерацию URL + периодическое сканирование
+// @version      6.1
+// @description  Поиск фото с периодическим сканированием + отчёт с текущими фото
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        GM_xmlhttpRequest
@@ -15,7 +15,7 @@
 (function() {
     'use strict';
     
-    console.log('[Photos] Модуль загружен v6.0');
+    console.log('[Photos] Модуль загружен v6.1');
     
     if (!unsafeWindow.EncarHub) {
         console.error('[Photos] CoreHub не найден!');
@@ -27,6 +27,7 @@
     let scanInterval = null;
     let allFoundUrls = new Set();
     let isScanning = true;
+    let fullScanComplete = false;
     
     // Поиск carId
     function findCarId() {
@@ -84,17 +85,20 @@
                     allFoundUrls.add(url);
                     newPhotos.push(url);
                     console.log(`[Photos] ✅ Найдено фото ${allFoundUrls.size}: ${num}.jpg`);
+                    
+                    // Обновляем список в Hub при каждом новом фото
+                    photosList = Array.from(allFoundUrls);
+                    Hub.set('photosList', photosList);
                 }
             }
             
-            // Небольшая задержка между запросами
             await new Promise(r => setTimeout(r, 100));
         }
         
         return newPhotos;
     }
     
-    // Основная функция поиска всех фото (с периодическим сканированием)
+    // Основная функция поиска
     async function findAllPhotos() {
         console.log('[Photos] Начало поиска...');
         
@@ -108,19 +112,19 @@
         
         console.log(`[Photos] CarId: ${carId}`);
         
-        // Останавливаем предыдущий интервал, если есть
+        // Останавливаем предыдущий интервал
         if (scanInterval) {
             clearInterval(scanInterval);
             scanInterval = null;
         }
         
-        // Сбрасываем найденные URL
         allFoundUrls.clear();
         isScanning = true;
+        fullScanComplete = false;
         
         // Первичное сканирование (первые 16)
-        const initialPhotos = await scanPhotoRange(carId, 1, 16);
-        initialPhotos.forEach(url => allFoundUrls.add(url));
+        console.log('[Photos] Первичное сканирование (1-16)...');
+        await scanPhotoRange(carId, 1, 16);
         
         photosList = Array.from(allFoundUrls);
         Hub.set('photosList', photosList);
@@ -128,38 +132,39 @@
         
         // Если нашли меньше 16, запускаем периодическое сканирование
         if (photosList.length < 16 && isScanning) {
-            console.log(`[Photos] Найдено только ${photosList.length}/16, запускаем периодическое сканирование...`);
+            console.log(`[Photos] Найдено ${photosList.length}/16, продолжаем сканирование...`);
             
             let currentRange = 17;
             
             scanInterval = setInterval(async () => {
                 if (!isScanning) return;
                 
-                console.log(`[Photos] Периодическое сканирование: проверяем фото ${currentRange}...`);
+                console.log(`[Photos] Сканирование: ${currentRange}-${currentRange+4}...`);
                 
-                const newPhotos = await scanPhotoRange(carId, currentRange, currentRange + 4);
-                if (newPhotos.length > 0) {
-                    photosList = Array.from(allFoundUrls);
-                    Hub.set('photosList', photosList);
-                    console.log(`[Photos] Теперь найдено ${photosList.length} фото`);
-                }
-                
+                await scanPhotoRange(carId, currentRange, currentRange + 4);
                 currentRange += 5;
                 
-                // Если набрали 16 фото или дошли до 50, останавливаем
+                photosList = Array.from(allFoundUrls);
+                Hub.set('photosList', photosList);
+                console.log(`[Photos] Теперь найдено ${photosList.length} фото`);
+                
+                // Если набрали 16 фото или дошли до 50
                 if (photosList.length >= 16 || currentRange > 50) {
-                    console.log(`[Photos] Останавливаем сканирование. Найдено ${photosList.length} фото`);
+                    console.log(`[Photos] Сканирование завершено. Найдено ${photosList.length} фото`);
                     clearInterval(scanInterval);
                     scanInterval = null;
                     isScanning = false;
+                    fullScanComplete = true;
                 }
-            }, 2000); // Каждые 2 секунды
+            }, 2000);
+        } else {
+            fullScanComplete = true;
         }
         
         return photosList;
     }
     
-    // Генерация HTML для отчёта
+    // Генерация HTML для отчёта (показывает текущие найденные фото)
     function generatePhotosHTML(photoUrls) {
         if (!photoUrls.length) {
             return '<div class="page"><div class="photos-header">📸 Фотографии отсутствуют</div></div>';
@@ -206,15 +211,25 @@
     async function printReport() {
         console.log('[Photos] Генерация КП...');
         
+        // Если сканирование ещё не начато или не завершено, показываем то, что есть
         if (!photosList.length) {
             const loadingDiv = document.createElement('div');
             loadingDiv.textContent = '🔍 Поиск фотографий...';
             loadingDiv.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#1e293b; color:white; padding:15px 25px; border-radius:12px; z-index:10030;';
             document.body.appendChild(loadingDiv);
-            await findAllPhotos();
-            loadingDiv.remove();
+            
+            // Запускаем поиск, но не ждём завершения
+            findAllPhotos().then(() => {
+                loadingDiv.remove();
+                // После того как хоть что-то нашли, сразу показываем отчёт
+                generateAndShowReport();
+            });
+        } else {
+            generateAndShowReport();
         }
-        
+    }
+    
+    function generateAndShowReport() {
         const photosHTML = generatePhotosHTML(photosList);
         
         const brand = Hub.get('carBrand') || '—';
@@ -320,6 +335,7 @@ ${photosHTML}
         print: printReport, 
         find: findAllPhotos, 
         getPhotos: () => photosList,
+        getScanningStatus: () => ({ isScanning, fullScanComplete, count: photosList.length }),
         stopScan: () => {
             if (scanInterval) {
                 clearInterval(scanInterval);
@@ -330,10 +346,10 @@ ${photosHTML}
         }
     };
     
-    // Автоматический запуск
+    // Автоматический запуск поиска в фоне
     setTimeout(() => {
-        findAllPhotos().then(p => console.log(`[Photos] Готово ${p.length} фото`));
+        findAllPhotos().then(p => console.log(`[Photos] Фоновый поиск завершён. Найдено ${p.length} фото`));
     }, 2000);
     
-    console.log('[Photos] Модуль загружен v6.0 (с периодическим сканированием)');
+    console.log('[Photos] Модуль загружен v6.1');
 })();
