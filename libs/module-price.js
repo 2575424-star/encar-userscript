@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar Price Module (GitHub CSV)
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.1
 // @description  Загрузка стоимости из CSV файла в репозитории GitHub
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -120,48 +120,83 @@
         return null;
     }
     
+    function setDataAndNotify(data) {
+        allPriceData = data;
+        priceDataLoaded = true;
+        Hub.set('priceDataLoaded', true);
+        Hub.set('allPriceData', allPriceData);
+        Hub.emit('priceData:loaded', allPriceData);
+        console.log(`[Price] ✅ Данные сохранены в Hub: ${allPriceData.length} записей`);
+        
+        const euroPrice = getCurrentEuroPrice();
+        if (euroPrice) {
+            Hub.set('selectedEuroPrice', euroPrice);
+            console.log(`[Price] ✅ Цена установлена: ${euroPrice.toLocaleString()} €`);
+        }
+    }
+    
     function loadPriceData() {
         console.log('[Price] Загрузка CSV из репозитория:', CSV_URL);
         
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: CSV_URL,
-            timeout: 10000,
-            onload: function(res) {
-                if (res.status === 200 && res.responseText && res.responseText.length > 100) {
-                    const data = parseCSV(res.responseText);
-                    if (data.length > 0) {
-                        allPriceData = data;
-                        priceDataLoaded = true;
-                        Hub.set('priceDataLoaded', true);
-                        Hub.set('allPriceData', allPriceData);
-                        Hub.emit('priceData:loaded', allPriceData);
-                        console.log(`[Price] ✅ CSV загружен, ${allPriceData.length} записей`);
-                        autoSelectPrice();
+        // Используем fetch (работает в консоли и в скрипте)
+        fetch(CSV_URL)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.text();
+            })
+            .then(csvText => {
+                const data = parseCSV(csvText);
+                if (data.length > 0) {
+                    setDataAndNotify(data);
+                    autoSelectPrice();
+                } else {
+                    console.error('[Price] Не удалось распарсить CSV через fetch');
+                    fallbackLoad();
+                }
+            })
+            .catch(err => {
+                console.error('[Price] Ошибка fetch:', err);
+                fallbackLoad();
+            });
+        
+        function fallbackLoad() {
+            console.log('[Price] Пробуем GM_xmlhttpRequest...');
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: CSV_URL,
+                timeout: 10000,
+                onload: function(res) {
+                    if (res.status === 200 && res.responseText && res.responseText.length > 100) {
+                        const data = parseCSV(res.responseText);
+                        if (data.length > 0) {
+                            setDataAndNotify(data);
+                            autoSelectPrice();
+                        } else {
+                            console.error('[Price] Не удалось распарсить CSV через GM_xmlhttpRequest');
+                            setDefaultPriceData();
+                        }
                     } else {
-                        console.error('[Price] Не удалось распарсить CSV');
+                        console.error('[Price] Ошибка загрузки CSV, статус:', res.status);
                         setDefaultPriceData();
                     }
-                } else {
-                    console.error('[Price] Ошибка загрузки CSV, статус:', res.status);
+                },
+                onerror: function(err) {
+                    console.error('[Price] Ошибка GM_xmlhttpRequest:', err);
+                    setDefaultPriceData();
+                },
+                ontimeout: function() {
+                    console.error('[Price] Таймаут GM_xmlhttpRequest');
                     setDefaultPriceData();
                 }
-            },
-            onerror: function(err) {
-                console.error('[Price] Ошибка сети:', err);
-                setDefaultPriceData();
-            },
-            ontimeout: function() {
-                console.error('[Price] Таймаут загрузки CSV');
-                setDefaultPriceData();
-            }
-        });
+            });
+        }
     }
     
     function setDefaultPriceData() {
         allPriceData = [
             { Марка: 'BMW', Модель: 'X6', Объем: '3000', Год: 2025, Цена: 33000 },
             { Марка: 'BMW', Модель: 'X5', Объем: '3000', Год: 2025, Цена: 32000 },
+            { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2015, Цена: 25000 },
             { Марка: 'HYUNDAI', Модель: 'SANTA FE', Объем: '2000', Год: 2025, Цена: 25000 },
             { Марка: 'KIA', Модель: 'SORENTO', Объем: '2000', Год: 2025, Цена: 24000 }
         ];
@@ -169,6 +204,7 @@
         Hub.set('priceDataLoaded', true);
         Hub.set('allPriceData', allPriceData);
         console.warn('[Price] Используются тестовые данные (CSV не загружен)');
+        autoSelectPrice();
     }
     
     function autoSelectPrice() {
@@ -176,6 +212,8 @@
         const model = Hub.get('carModel');
         const engine = Hub.get('carEngineVolume');
         const year = Hub.get('carYear');
+        
+        console.log(`[Price] Авто-выбор: ${brand} ${model} ${engine}cc ${year}`);
         
         if (brand && model && engine && year && allPriceData.length) {
             const price = findPriceFromData(brand, model, engine, year);
@@ -186,7 +224,9 @@
                 selectedPriceEngine = engine;
                 selectedPriceYear = year;
                 Hub.set('selectedEuroPrice', price);
-                console.log(`[Price] ✅ Авто-выбор: ${price.toLocaleString()} €`);
+                console.log(`[Price] ✅ Авто-выбор цены: ${price.toLocaleString()} €`);
+            } else {
+                console.log(`[Price] ⚠️ Цена не найдена для ${brand} ${model}`);
             }
         }
     }
@@ -207,10 +247,12 @@
         setManual: setManualPrice,
         refresh: loadPriceData,
         findPrice: (brand, model, engine, year) => findPriceFromData(brand, model, engine, year),
-        getCurrentPrice: getCurrentEuroPrice
+        getCurrentPrice: getCurrentEuroPrice,
+        getData: () => allPriceData
     };
     
     Hub.on('carData:ready', () => {
+        console.log('[Price] carData:ready получен');
         if (allPriceData.length) {
             autoSelectPrice();
         } else {
@@ -218,7 +260,8 @@
         }
     });
     
+    // Запускаем загрузку
     loadPriceData();
     
-    console.log('[Price] Модуль загружен (версия 3.0)');
+    console.log('[Price] Модуль загружен (версия 3.1)');
 })();
