@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Encar UI Module (Enhanced)
+// @name         Encar UI Module (Compact)
 // @namespace    http://tampermonkey.net/
-// @version      5.0
-// @description  Улучшенная панель интерфейса (увеличенный размер)
+// @version      6.0
+// @description  Компактная панель с крупным шрифтом (без фото)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -30,17 +30,8 @@
             to { transform: translateX(0); opacity: 1; }
         }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
         .encar-panel {
             animation: slideIn 0.3s ease-out;
-        }
-        
-        .encar-panel .loading {
-            animation: pulse 1.5s ease-in-out infinite;
         }
         
         .encar-panel button {
@@ -62,17 +53,17 @@
         }
         
         .encar-panel::-webkit-scrollbar {
-            width: 6px;
+            width: 4px;
         }
         
         .encar-panel::-webkit-scrollbar-track {
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
+            border-radius: 2px;
         }
         
         .encar-panel::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
+            border-radius: 2px;
         }
     `);
     
@@ -101,7 +92,7 @@
     function updatePanel() {
         if (!mainPanel) return;
         
-        // Марка и модель (в левой части заголовка)
+        // Марка и модель
         const brand = Hub.get('carBrand') || '—';
         const model = Hub.get('carModel') || '—';
         const modelStr = `${brand} ${model}`.trim();
@@ -110,7 +101,7 @@
             if (titleSpan) titleSpan.textContent = modelStr;
         }
         
-        // Просмотры (в правой части заголовка)
+        // Просмотры
         const views = Hub.get('carViews');
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
@@ -211,23 +202,6 @@
         const usdtRate = Hub.get('usdtRate') || 0;
         const usdtHeader = mainPanel.querySelector('#usdt-header');
         if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
-        
-        // Статус поиска фото
-        const photoStatus = mainPanel.querySelector('#photo-status');
-        if (photoStatus && unsafeWindow.EncarPhotos) {
-            const photos = unsafeWindow.EncarPhotos.getPhotos();
-            const status = unsafeWindow.EncarPhotos.getScanningStatus?.();
-            if (photos?.length) {
-                photoStatus.innerHTML = `📸 ${photos.length} фото`;
-                photoStatus.style.color = '#22c55e';
-            } else if (status?.isScanning) {
-                photoStatus.innerHTML = `🔍 поиск...`;
-                photoStatus.style.color = '#fbbf24';
-            } else {
-                photoStatus.innerHTML = `📸 нет фото`;
-                photoStatus.style.color = '#ef4444';
-            }
-        }
     }
     
     // ========== СОЗДАНИЕ ПАНЕЛИ ==========
@@ -244,13 +218,13 @@
             z-index: 10001 !important;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
             color: #f1f5f9 !important;
-            border-radius: 20px !important;
-            padding: 16px 20px !important;
+            border-radius: 16px !important;
+            padding: 12px 16px !important;
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
-            box-shadow: 0 20px 35px -10px rgba(0,0,0,0.4) !important;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
             border: 1px solid rgba(255,255,255,0.1) !important;
-            font-size: 14px !important;
-            width: 400px !important;
+            font-size: 13px !important;
+            width: 340px !important;
             backdrop-filter: blur(8px) !important;
             cursor: move;
             user-select: none;
@@ -258,18 +232,17 @@
         `;
         
         mainPanel.innerHTML = `
-            <div id="drag-handle" style="cursor: move; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+            <div id="drag-handle" style="cursor: move; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 16px; font-weight: 700;">🚗 <span id="panel-title">Encar Helper</span></span>
-                        <span id="photo-status" style="font-size: 11px; background: rgba(0,0,0,0.4); padding: 3px 8px; border-radius: 12px;">📸 поиск...</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 15px; font-weight: 700;">🚗 <span id="panel-title">Encar Helper</span></span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 12px; color: #94a3b8;">👁️ <span id="info-views">—</span></span>
-                        <span id="collapse-btn" style="cursor: pointer; font-size: 16px; color: #94a3b8; padding: 0 4px;">−</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 11px; color: #94a3b8;">👁️ <span id="info-views">—</span></span>
+                        <span id="collapse-btn" style="cursor: pointer; font-size: 14px; color: #94a3b8;">−</span>
                     </div>
                 </div>
-                <div style="display: flex; gap: 8px; margin-top: 8px; font-size: 11px; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 24px; width: fit-content;">
+                <div style="display: flex; gap: 6px; margin-top: 6px; font-size: 10px; background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 20px; width: fit-content;">
                     <span id="usd-header" class="clickable" style="color: #60a5fa;">🇺🇸 --</span>
                     <span style="color: #475569;">|</span>
                     <span id="eur-header" class="clickable" style="color: #60a5fa;">🇪🇺 --</span>
@@ -281,98 +254,98 @@
             </div>
             
             <div id="panel-full-content">
-                <!-- Основная информация (вертикальный список) -->
-                <div style="margin-bottom: 14px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="color: #94a3b8; font-size: 13px;">📅 Год выпуска</span>
-                        <span id="info-year" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                <!-- Основная информация (левая колонка - крупный шрифт, правая - значения) -->
+                <div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">📅 Год</span>
+                        <span id="info-year" style="font-size: 15px; font-weight: 600; color: #fbbf24;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="color: #94a3b8; font-size: 13px;">🔧 Двигатель</span>
-                        <span id="info-engine" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">🔧 Двигатель</span>
+                        <span id="info-engine" style="font-size: 15px; font-weight: 600; color: #fbbf24;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="color: #94a3b8; font-size: 13px;">⚡ Мощность</span>
-                        <span id="info-power" class="clickable" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">⚡ Мощность</span>
+                        <span id="info-power" class="clickable" style="font-size: 15px; font-weight: 600; color: #fbbf24;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="color: #94a3b8; font-size: 13px;">📊 Пробег</span>
-                        <span id="info-mileage" style="font-size: 14px; font-weight: 600; color: #fbbf24;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">📊 Пробег</span>
+                        <span id="info-mileage" style="font-size: 15px; font-weight: 600; color: #fbbf24;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <span style="color: #94a3b8; font-size: 13px;">🔢 VIN номер</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">🔢 VIN</span>
                         <span id="info-vin" class="clickable" style="font-family: monospace; font-size: 12px; cursor: pointer;">—</span>
                     </div>
                 </div>
                 
                 <!-- Цена авто -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 14px; padding: 12px; margin-bottom: 12px;">
-                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">💰 Цена авто</div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена авто</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                         <span style="font-size: 13px;">🇰🇷 KRW:</span>
-                        <span id="price-krw" style="color: #fbbf24; font-weight: 600; font-size: 14px;">—</span>
+                        <span id="price-krw" style="color: #fbbf24; font-weight: 600; font-size: 13px;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                         <span style="font-size: 13px;">🇺🇸 USD:</span>
-                        <span id="price-usd" style="color: #fbbf24; font-weight: 600; font-size: 14px;">—</span>
+                        <span id="price-usd" style="color: #fbbf24; font-weight: 600; font-size: 13px;">—</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 13px;">🇪🇺 EUR:</span>
-                        <div style="position: relative;">
-                            <span id="price-euro" class="clickable" style="color: #fbbf24; font-weight: 700; font-size: 15px; text-decoration: underline;">—</span>
-                            <span id="price-arrow" style="margin-left: 4px; font-size: 10px; color: #94a3b8;">▼</span>
+                        <div>
+                            <span id="price-euro" class="clickable" style="color: #fbbf24; font-weight: 700; font-size: 14px; text-decoration: underline;">—</span>
+                            <span id="price-arrow" style="margin-left: 3px; font-size: 9px; color: #94a3b8;">▼</span>
                         </div>
                     </div>
-                    <div id="price-content" style="display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
-                        <div id="price-content-inner" style="font-size: 12px;">Загрузка...</div>
+                    <div id="price-content" style="display: none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08);">
+                        <div id="price-content-inner" style="font-size: 11px;">Загрузка...</div>
                     </div>
                 </div>
                 
                 <!-- ТПО и Утильсбор -->
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 4px 0;">
-                    <span style="color: #94a3b8; font-size: 13px;">🏛️ ТПО:</span>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span style="color: #94a3b8; font-size: 14px; font-weight: 500;">🏛️ ТПО</span>
                     <span id="tpo-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding: 4px 0;">
-                    <span style="color: #94a3b8; font-size: 13px;">♻️ Утильсбор:</span>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="color: #94a3b8; font-size: 14px; font-weight: 500;">♻️ Утильсбор</span>
                     <span id="util-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
                 </div>
                 
-                <!-- Расходы -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 14px; padding: 12px; margin-bottom: 12px;">
-                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">📋 Расходы</div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="font-size: 13px;">📦 Корея + логистика:</span>
-                        <span id="logistics-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                <!-- Расходы (увеличенный шрифт в 2-3 раза) -->
+                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; margin-bottom: 8px;">
+                    <div style="font-size: 13px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">📋 Расходы</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 16px; font-weight: 600;">📦 Корея + логистика</span>
+                        <span id="logistics-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="font-size: 13px;">🚚 Услуги Бишкек + доставка:</span>
-                        <span id="services-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 16px; font-weight: 600;">🚚 Услуги Бишкек + доставка</span>
+                        <span id="services-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                        <span style="font-size: 13px;">📄 Документы РФ:</span>
-                        <span id="docs-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 16px; font-weight: 600;">📄 Документы РФ</span>
+                        <span id="docs-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="font-size: 13px;">🤝 Наши услуги:</span>
-                        <span id="our-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
+                        <span style="font-size: 16px; font-weight: 600;">🤝 Наши услуги</span>
+                        <span id="our-value" class="clickable" style="font-weight: 700; font-size: 18px; color: #fbbf24;">—</span>
                     </div>
                 </div>
                 
                 <!-- Итого -->
-                <div style="border-top: 2px solid #fbbf24; padding-top: 12px; margin-top: 8px;">
+                <div style="border-top: 2px solid #fbbf24; padding-top: 8px; margin-top: 4px;">
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <span style="font-weight: 700; color: #fbbf24; font-size: 16px;">💰 ИТОГО:</span>
-                        <span id="total-price" style="font-size: 22px; font-weight: 800; color: #fbbf24;">0 ₽</span>
+                        <span style="font-weight: 700; color: #fbbf24; font-size: 18px;">💰 ИТОГО</span>
+                        <span id="total-price" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0 ₽</span>
                     </div>
                 </div>
                 
                 <!-- Кнопки действий -->
-                <div style="display: flex; gap: 10px; margin-top: 16px;">
-                    <button id="print-report-btn" style="flex: 1; background: #fbbf24; border: none; padding: 10px 0; border-radius: 12px; font-weight: 700; cursor: pointer; color: #0f172a; font-size: 14px; transition: all 0.2s;">
+                <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <button id="print-report-btn" style="flex: 1; background: #fbbf24; border: none; padding: 8px 0; border-radius: 10px; font-weight: 700; cursor: pointer; color: #0f172a; font-size: 13px;">
                         🖨️ Коммерческое предложение
                     </button>
-                    <button id="refresh-panel-btn" style="background: rgba(255,255,255,0.1); border: none; padding: 10px 14px; border-radius: 12px; font-weight: 600; cursor: pointer; color: #f1f5f9; font-size: 14px; transition: all 0.2s;">
+                    <button id="refresh-panel-btn" style="background: rgba(255,255,255,0.1); border: none; padding: 8px 12px; border-radius: 10px; font-weight: 600; cursor: pointer; color: #f1f5f9; font-size: 13px;">
                         🔄
                     </button>
                 </div>
@@ -381,7 +354,7 @@
             <div id="panel-collapsed-content" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="color: #94a3b8; font-size: 13px;">💰 ИТОГО:</span>
-                    <span id="collapsed-total-price" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0 ₽</span>
+                    <span id="collapsed-total-price" style="font-size: 18px; font-weight: 800; color: #fbbf24;">0 ₽</span>
                 </div>
             </div>
         `;
@@ -433,15 +406,15 @@
                 if (isCollapsed) {
                     fullContent.style.display = 'block';
                     collapsedContent.style.display = 'none';
-                    mainPanel.style.width = '400px';
-                    mainPanel.style.padding = '16px 20px';
+                    mainPanel.style.width = '340px';
+                    mainPanel.style.padding = '12px 16px';
                     collapseBtn.textContent = '−';
                     isCollapsed = false;
                 } else {
                     fullContent.style.display = 'none';
                     collapsedContent.style.display = 'block';
-                    mainPanel.style.width = '240px';
-                    mainPanel.style.padding = '12px 16px';
+                    mainPanel.style.width = '200px';
+                    mainPanel.style.padding = '10px 14px';
                     collapseBtn.textContent = '+';
                     isCollapsed = true;
                 }
@@ -568,5 +541,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Увеличенная панель загружена v5.0');
+    console.log('[UI] Компактная панель с крупным шрифтом загружена v6.0');
 })();
