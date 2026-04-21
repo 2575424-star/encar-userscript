@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Encar Photos Module (Light)
+// @name         Encar Photos Module (Clean)
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Только кнопка коммерческого предложения
+// @version      2.0
+// @description  Только кнопка коммерческого предложения (без поиска фото)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        none
@@ -11,7 +11,7 @@
 (function() {
     'use strict';
     
-    console.log('[Photos] Лёгкая версия загружена');
+    console.log('[Photos] Чистая версия загружена (без поиска фото)');
     
     if (!unsafeWindow.EncarHub) {
         console.error('[Photos] CoreHub не найден!');
@@ -20,7 +20,7 @@
     
     const Hub = unsafeWindow.EncarHub;
     
-    // Простая функция печати (только данные, без фото)
+    // Простая функция печати
     function printReport() {
         console.log('[Photos] Генерация КП...');
         
@@ -94,7 +94,7 @@
 <div class="info-row"><span class="info-label">Просмотры:</span><span>${views?.toLocaleString() || '—'}</span></div>
 </div>
 <table class="price-table">
-<thead><tr><th>Статья расходов</th><th>Сумма</th></tr></thead>
+<thead><tr><th>Статья расходов</th><th>Сумма</th><tr></thead>
 <tbody>
 <tr><td>🚗 Стоимость авто (USD)</td><td>${priceUsd.toLocaleString()} $</td></tr>
 <tr><td>💰 Стоимость (EUR)</td><td>${typeof euroPrice === 'number' ? euroPrice.toLocaleString() : euroPrice} €</td></tr>
@@ -117,11 +117,10 @@
         printWindow.document.close();
     }
     
-    // Экспорт
+    // Экспорт только функции печати
     unsafeWindow.EncarPhotos = { 
-        print: printReport,
-        getPhotos: () => []
+        print: printReport
     };
     
-    console.log('[Photos] Лёгкая версия готова, кнопка КП работает');
+    console.log('[Photos] Чистая версия готова, кнопка КП работает');
 })();
