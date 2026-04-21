@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      8.0
-// @description  Финальная версия панели (новая структура расходов)
+// @version      9.0
+// @description  Финальная версия панели
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -70,19 +70,19 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
-            background: #22c55e;
+            width: 24px;
+            height: 24px;
+            background: #fbbf24;
             border-radius: 50%;
             cursor: pointer;
             transition: all 0.2s ease;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            color: white;
+            color: #0f172a;
         }
         
         .collapse-btn:hover {
-            background: #16a34a;
+            background: #d97706;
             transform: scale(1.05);
         }
     `);
@@ -112,7 +112,7 @@
     function updatePanel() {
         if (!mainPanel) return;
         
-        // Марка и модель
+        // Марка и модель (увеличенный шрифт 22px)
         const brand = Hub.get('carBrand') || '—';
         const model = Hub.get('carModel') || '—';
         const modelStr = `${brand} ${model}`.trim();
@@ -121,7 +121,7 @@
             if (titleSpan) titleSpan.textContent = modelStr;
         }
         
-        // Просмотры
+        // Просмотры (белый цвет)
         const views = Hub.get('carViews');
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
@@ -148,7 +148,7 @@
         const mileageSpan = mainPanel.querySelector('#info-mileage');
         if (mileageSpan) mileageSpan.textContent = formatMileage(mileage);
         
-        // VIN
+        // VIN (увеличенный шрифт 13px)
         const vin = Hub.get('carVin');
         const vinSpan = mainPanel.querySelector('#info-vin');
         if (vinSpan) vinSpan.textContent = formatVin(vin);
@@ -183,7 +183,7 @@
         const kirgizSpan = mainPanel.querySelector('#kirgiz-value');
         if (kirgizSpan) kirgizSpan.textContent = `${formatNumber(kirgizService)} $`;
         
-        // Доставка в РФ (было servicesBishkek)
+        // Доставка в РФ
         const deliveryRf = Hub.get('servicesBishkek') || 1200;
         const deliverySpan = mainPanel.querySelector('#delivery-value');
         if (deliverySpan) deliverySpan.textContent = `${formatNumber(deliveryRf)} $`;
@@ -262,10 +262,10 @@
             <div id="drag-handle" style="cursor: move; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 15px; font-weight: 700;">🚗 <span id="panel-title">Encar Helper</span></span>
+                        <span style="font-size: 22px; font-weight: 700;">🚗 <span id="panel-title">Encar Helper</span></span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 16px; font-weight: 600; color: #94a3b8;">👁️ <span id="info-views" style="font-size: 16px; font-weight: 700; color: #fbbf24;">—</span></span>
+                        <span style="font-size: 16px; font-weight: 600; color: #ffffff;">👁️ <span id="info-views" style="font-size: 16px; font-weight: 700; color: #ffffff;">—</span></span>
                         <div id="collapse-btn" class="collapse-btn">−</div>
                     </div>
                 </div>
@@ -301,7 +301,7 @@
                     </div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">🔢 VIN</span>
-                        <span id="info-vin" class="clickable" style="font-family: monospace; font-size: 12px; cursor: pointer;">—</span>
+                        <span id="info-vin" class="clickable" style="font-family: monospace; font-size: 13px; font-weight: 500; cursor: pointer;">—</span>
                     </div>
                 </div>
                 
@@ -487,13 +487,12 @@
             }
         };
         
-        // Услуги в Киргизии (фиксированная сумма 500$)
+        // Услуги в Киргизии
         document.getElementById('kirgiz-value').onclick = () => {
             const val = prompt('Услуги в Киргизии ($):', 500);
             if (val && !isNaN(parseFloat(val))) {
                 const newVal = parseFloat(val);
                 document.getElementById('kirgiz-value').textContent = `${newVal.toLocaleString()} $`;
-                // Можно сохранить в Hub, если нужно
                 Hub.set('kirgizService', newVal);
             }
         };
@@ -588,5 +587,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Панель с новой структурой загружена v8.0');
+    console.log('[UI] Финальная панель загружена v9.0');
 })();
