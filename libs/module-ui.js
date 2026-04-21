@@ -590,4 +590,198 @@
     }, 500);
     
     console.log('[UI] Модуль загружен (с работающим меню цены)');
+    // ========== ДОПОЛНИТЕЛЬНЫЙ ФИКС ДЛЯ МЕНЮ ЦЕНЫ ==========
+    // Этот код гарантирует, что меню будет работать даже если ID элемента другой
+    
+    function ensurePriceMenu() {
+        // Ищем цену по разным возможным ID
+        let priceSpan = document.getElementById('price-euro') || 
+                       document.getElementById('encar-price-value');
+        
+        // Если не нашли по ID, ищем по тексту
+        if (!priceSpan) {
+            const panel = document.getElementById('encar-combined-panel');
+            if (panel) {
+                const elements = panel.querySelectorAll('span, div');
+                for (let el of elements) {
+                    if (el.textContent && el.textContent.match(/\d[\d,]*\s*€/)) {
+                        priceSpan = el;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!priceSpan) return false;
+        
+        // Проверяем, есть ли уже обработчик
+        if (priceSpan._menuFixed === true) return true;
+        
+        // Создаём контейнер для меню
+        let priceContent = document.getElementById('price-content');
+        let priceArrow = document.getElementById('price-arrow');
+        
+        if (!priceContent) {
+            priceContent = document.createElement('div');
+            priceContent.id = 'price-content';
+            priceContent.style.display = 'none';
+            priceContent.style.marginTop = '8px';
+            priceContent.style.paddingTop = '6px';
+            priceContent.style.borderTop = '1px solid rgba(255,255,255,0.08)';
+            
+            const innerDiv = document.createElement('div');
+            innerDiv.id = 'price-content-inner';
+            priceContent.appendChild(innerDiv);
+            
+            const parent = priceSpan.closest('div');
+            if (parent && parent.parentNode) {
+                parent.parentNode.insertBefore(priceContent, parent.nextSibling);
+            }
+        }
+        
+        if (!priceArrow && priceSpan.parentNode) {
+            priceArrow = document.createElement('span');
+            priceArrow.id = 'price-arrow';
+            priceArrow.style.marginLeft = '6px';
+            priceArrow.style.fontSize = '10px';
+            priceArrow.style.color = '#94a3b8';
+            priceArrow.textContent = '▼';
+            priceSpan.parentNode.appendChild(priceArrow);
+        }
+        
+        // Делаем цену кликабельной
+        priceSpan.style.cursor = 'pointer';
+        priceSpan.style.textDecoration = 'underline';
+        priceSpan.style.color = '#fbbf24';
+        
+        // Добавляем обработчик
+        priceSpan.onclick = function(e) {
+            e.stopPropagation();
+            const pc = document.getElementById('price-content');
+            const pa = document.getElementById('price-arrow');
+            
+            if (pc.style.display === 'none') {
+                pc.style.display = 'block';
+                if (pa) pa.innerHTML = '▲';
+                
+                const innerDiv = document.getElementById('price-content-inner');
+                const allPriceData = Hub.get('allPriceData');
+                
+                if (allPriceData && allPriceData.length) {
+                    const brands = [...new Set(allPriceData.map(i => i.Марка))].sort();
+                    innerDiv.innerHTML = `
+                        <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Марка:</label>
+                        <select id="price-brand-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;">
+                            <option value="">— выберите марку —</option>
+                            ${brands.map(b => `<option value="${b}">${b}</option>`).join('')}
+                        </select></div>
+                        <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Модель:</label>
+                        <select id="price-model-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;" disabled>
+                            <option value="">— выберите модель —</option>
+                        </select></div>
+                        <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Объём:</label>
+                        <select id="price-engine-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;" disabled>
+                            <option value="">— выберите объём —</option>
+                        </select></div>
+                        <div style="margin-bottom:8px;"><label style="font-size:11px; color:#94a3b8;">Год:</label>
+                        <select id="price-year-select" style="width:100%; padding:6px; background:#0f172a; color:white; border:1px solid #475569; border-radius:8px;" disabled>
+                            <option value="">— выберите год —</option>
+                        </select></div>
+                        <div style="display:flex; gap:8px; margin-top:12px;">
+                            <button id="price-apply-auto" style="background:#fbbf24; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; font-weight:bold;">Применить</button>
+                            <button id="price-cancel-auto" style="background:#475569; border:none; padding:6px 12px; border-radius:8px; cursor:pointer; color:white;">Отмена</button>
+                        </div>
+                    `;
+                    
+                    const brandSelect = document.getElementById('price-brand-select');
+                    const modelSelect = document.getElementById('price-model-select');
+                    const engineSelect = document.getElementById('price-engine-select');
+                    const yearSelect = document.getElementById('price-year-select');
+                    const applyBtn = document.getElementById('price-apply-auto');
+                    const cancelBtn = document.getElementById('price-cancel-auto');
+                    
+                    if (brandSelect) {
+                        brandSelect.onchange = () => {
+                            const brand = brandSelect.value;
+                            if (!brand) return;
+                            const models = [...new Set(allPriceData.filter(i => i.Марка === brand).map(i => i.Модель))].sort();
+                            modelSelect.innerHTML = '<option value="">— выберите модель —</option>' + models.map(m => `<option value="${m}">${m}</option>`).join('');
+                            modelSelect.disabled = false;
+                            engineSelect.disabled = true;
+                            yearSelect.disabled = true;
+                        };
+                    }
+                    
+                    if (modelSelect) {
+                        modelSelect.onchange = () => {
+                            const brand = brandSelect.value, model = modelSelect.value;
+                            if (!brand || !model) return;
+                            const engines = [...new Set(allPriceData.filter(i => i.Марка === brand && i.Модель === model).map(i => i.Объем))].sort((a,b) => parseInt(a)-parseInt(b));
+                            engineSelect.innerHTML = '<option value="">— выберите объём —</option>' + engines.map(e => `<option value="${e}">${e}</option>`).join('');
+                            engineSelect.disabled = false;
+                            yearSelect.disabled = true;
+                        };
+                    }
+                    
+                    if (engineSelect) {
+                        engineSelect.onchange = () => {
+                            const brand = brandSelect.value, model = modelSelect.value, engine = engineSelect.value;
+                            if (!brand || !model || !engine) return;
+                            const years = [...new Set(allPriceData.filter(i => i.Марка === brand && i.Модель === model && i.Объем === engine).map(i => i.Год))].sort((a,b) => b-a);
+                            yearSelect.innerHTML = '<option value="">— выберите год —</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+                            yearSelect.disabled = false;
+                        };
+                    }
+                    
+                    if (applyBtn) {
+                        applyBtn.onclick = () => {
+                            const brand = brandSelect.value, model = modelSelect.value, engine = engineSelect.value, year = parseInt(yearSelect.value);
+                            if (!brand || !model || !engine || !year) { alert('Выберите все параметры'); return; }
+                            const price = allPriceData.find(i => i.Марка === brand && i.Модель === model && i.Объем === engine && i.Год === year)?.Цена;
+                            if (price) {
+                                Hub.set('selectedEuroPrice', price);
+                                priceSpan.textContent = `${price.toLocaleString()} €`;
+                                updatePanel();
+                            }
+                            pc.style.display = 'none';
+                            if (pa) pa.innerHTML = '▼';
+                        };
+                    }
+                    
+                    if (cancelBtn) {
+                        cancelBtn.onclick = () => {
+                            pc.style.display = 'none';
+                            if (pa) pa.innerHTML = '▼';
+                        };
+                    }
+                } else {
+                    innerDiv.innerHTML = '<div style="text-align:center;">Загрузка данных...</div>';
+                }
+            } else {
+                pc.style.display = 'none';
+                if (pa) pa.innerHTML = '▼';
+            }
+        };
+        
+        priceSpan._menuFixed = true;
+        console.log('[UI] ✅ Дополнительный фикс меню цены применён');
+        return true;
+    }
+    
+    // Запускаем фикс после создания панели
+    setTimeout(() => {
+        ensurePriceMenu();
+    }, 200);
+    
+    // Наблюдатель для повторного применения
+    const menuObserver = new MutationObserver(() => {
+        ensurePriceMenu();
+    });
+    
+    setTimeout(() => {
+        const panel = document.getElementById('encar-combined-panel');
+        if (panel) {
+            menuObserver.observe(panel, { childList: true, subtree: true });
+        }
+    }, 500);
 })();
