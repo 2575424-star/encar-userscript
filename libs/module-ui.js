@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      11.0
-// @description  Финальная версия панели (с логистикой и страховыми)
+// @version      12.0
+// @description  Финальная версия панели (со страховыми выплатами)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -22,6 +22,7 @@
     let isDragging = false;
     let dragOffsetX = 0, dragOffsetY = 0;
     let isCollapsed = false;
+    let accidentDetails = null;
     
     // ========== СТИЛИ ==========
     GM_addStyle(`
@@ -117,6 +118,12 @@
         return num ? num.toLocaleString() : '—';
     }
     
+    function formatAccidentTotal(accidentInfo) {
+        if (!accidentInfo || accidentInfo.count === undefined) return '—';
+        if (accidentInfo.count === 0) return 'Без ДТП';
+        return `${accidentInfo.totalUsd?.toLocaleString() || '0'} $`;
+    }
+    
     // ========== ОБНОВЛЕНИЕ ПАНЕЛИ ==========
     function updatePanel() {
         if (!mainPanel) return;
@@ -166,7 +173,7 @@
         const accidentTotal = Hub.get('accidentTotal');
         const accidentSpan = mainPanel.querySelector('#accident-value');
         if (accidentSpan) {
-            if (accidentTotal && accidentTotal !== '—' && accidentTotal !== 'загрузка...') {
+            if (accidentTotal && accidentTotal !== '—') {
                 accidentSpan.innerHTML = accidentTotal;
             } else {
                 accidentSpan.innerHTML = '<span style="color:#f97316;">загрузка...</span>';
@@ -174,11 +181,12 @@
         }
         
         // Детали страховых выплат
-        const accidentDetails = Hub.get('accidentDetails');
+        const accidentDetailsData = Hub.get('accidentDetails');
         const accidentDetailsDiv = mainPanel.querySelector('#accident-details');
-        if (accidentDetailsDiv && accidentDetails && accidentDetails.length) {
-            const usdToKrw = Hub.get('usdToKrw') || 1473;
-            accidentDetailsDiv.innerHTML = accidentDetails.map((acc, idx) => {
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        
+        if (accidentDetailsDiv && accidentDetailsData && accidentDetailsData.length) {
+            accidentDetailsDiv.innerHTML = accidentDetailsData.map((acc, idx) => {
                 const part = acc.partCost || 0;
                 const labor = acc.laborCost || 0;
                 const paint = acc.paintingCost || 0;
@@ -192,8 +200,7 @@
                     🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
                 </div>`;
             }).join('');
-            accidentDetailsDiv.style.display = 'block';
-        } else if (accidentDetailsDiv && accidentDetails && accidentDetails.length === 0) {
+        } else if (accidentDetailsDiv && accidentDetailsData && accidentDetailsData.length === 0) {
             accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
         }
         
@@ -203,7 +210,6 @@
         if (priceKrwSpan) priceKrwSpan.textContent = carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—';
         
         // Цена в USD
-        const usdToKrw = Hub.get('usdToKrw') || 1473;
         const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
         const priceUsdSpan = mainPanel.querySelector('#price-usd');
         if (priceUsdSpan) priceUsdSpan.textContent = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
@@ -278,6 +284,42 @@
         const usdtRate = Hub.get('usdtRate') || 0;
         const usdtHeader = mainPanel.querySelector('#usdt-header');
         if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
+    }
+    
+    // ========== ФУНКЦИЯ ОБНОВЛЕНИЯ СТРАХОВЫХ ВЫПЛАТ ==========
+    function updateAccidentPanel(accidentInfo) {
+        const accidentSpan = document.getElementById('accident-value');
+        const accidentDetailsDiv = document.getElementById('accident-details');
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        
+        if (accidentSpan) {
+            if (!accidentInfo || accidentInfo.count === undefined) {
+                accidentSpan.innerHTML = '<span style="color:#f97316;">загрузка...</span>';
+            } else if (accidentInfo.count === 0) {
+                accidentSpan.innerHTML = 'Без ДТП';
+            } else {
+                accidentSpan.innerHTML = `${accidentInfo.totalUsd?.toLocaleString() || '0'} $`;
+            }
+        }
+        
+        if (accidentDetailsDiv && accidentInfo && accidentInfo.details && accidentInfo.details.length > 0) {
+            accidentDetailsDiv.innerHTML = accidentInfo.details.map((acc, idx) => {
+                const part = acc.partCost || 0;
+                const labor = acc.laborCost || 0;
+                const paint = acc.paintingCost || 0;
+                const totalWon = part + labor + paint;
+                const totalUsd = Math.round(totalWon / usdToKrw);
+                return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
+                    <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
+                    💰 Выплата: ${totalUsd.toLocaleString()} $<br>
+                    🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
+                    🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
+                    🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
+                </div>`;
+            }).join('');
+        } else if (accidentDetailsDiv && accidentInfo && accidentInfo.count === 0) {
+            accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
+        }
     }
     
     // ========== СОЗДАНИЕ ПАНЕЛИ ==========
@@ -682,19 +724,12 @@
     
     // Подписка на загрузку страховых данных
     Hub.on('accidentData:loaded', (data) => {
-        const accidentSpan = document.getElementById('accident-value');
-        if (accidentSpan) {
-            if (data && data.totalUsd) {
-                accidentSpan.innerHTML = `${data.totalUsd.toLocaleString()} $`;
-            } else if (data && data.count === 0) {
-                accidentSpan.innerHTML = 'Без ДТП';
-            }
-        }
+        updateAccidentPanel(data);
         updatePanel();
     });
     
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель v11.0 загружена');
+    console.log('[UI] Финальная панель со страховыми выплатами загружена v12.0');
 })();
