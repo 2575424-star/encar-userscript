@@ -104,7 +104,7 @@
         const priceUsdSpan = mainPanel.querySelector('#price-usd');
         if (priceUsdSpan) priceUsdSpan.textContent = priceUsd.toLocaleString();
         
-        const priceEuroSpan = mainPanel.querySelector('#encar-price-value');
+        const priceEuroSpan = mainPanel.querySelector('#price-euro');
         if (priceEuroSpan) {
             priceEuroSpan.textContent = euroPrice ? `${euroPrice.toLocaleString()} €` : '—';
         }
@@ -273,7 +273,7 @@
     
     // Привязка обработчика к цене
     function attachPriceHandler() {
-        const priceSpan = document.getElementById('encar-price-value');
+        const priceSpan = document.getElementById('price-euro');
         const priceContent = document.getElementById('price-content');
         const priceArrow = document.getElementById('price-arrow');
         
@@ -354,7 +354,7 @@
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span>🇪🇺 EUR:</span>
                         <div style="position:relative;">
-                            <span id="encar-price-value" style="cursor:pointer; text-decoration:underline; color:#fbbf24;">—</span>
+                            <span id="price-euro" style="cursor:pointer; text-decoration:underline; color:#fbbf24;">—</span>
                             <span id="price-arrow" style="margin-left:6px; font-size:10px; color:#94a3b8;">▼</span>
                         </div>
                     </div>
