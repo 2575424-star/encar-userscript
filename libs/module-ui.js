@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Encar UI Module (Compact)
+// @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      6.0
-// @description  Компактная панель с крупным шрифтом (без фото)
+// @version      7.0
+// @description  Финальная версия панели (увеличенные курсы, просмотры, зелёная кнопка)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -65,6 +65,26 @@
             background: rgba(255, 255, 255, 0.3);
             border-radius: 2px;
         }
+        
+        .collapse-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: #22c55e;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .collapse-btn:hover {
+            background: #16a34a;
+            transform: scale(1.05);
+        }
     `);
     
     // ========== ФОРМАТИРОВАНИЕ ==========
@@ -101,7 +121,7 @@
             if (titleSpan) titleSpan.textContent = modelStr;
         }
         
-        // Просмотры
+        // Просмотры (увеличенный шрифт)
         const views = Hub.get('carViews');
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
@@ -186,7 +206,7 @@
         const ourSpan = mainPanel.querySelector('#our-value');
         if (ourSpan) ourSpan.textContent = `${formatNumber(ourServices)} ₽`;
         
-        // Курсы валют
+        // Курсы валют (увеличенный шрифт)
         const usdRate = Hub.get('usdRate') || 0;
         const usdHeader = mainPanel.querySelector('#usd-header');
         if (usdHeader) usdHeader.textContent = `🇺🇸 ${usdRate.toFixed(2)}`;
@@ -237,24 +257,24 @@
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 15px; font-weight: 700;">🚗 <span id="panel-title">Encar Helper</span></span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 11px; color: #94a3b8;">👁️ <span id="info-views">—</span></span>
-                        <span id="collapse-btn" style="cursor: pointer; font-size: 14px; color: #94a3b8;">−</span>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #94a3b8;">👁️ <span id="info-views" style="font-size: 16px; font-weight: 700; color: #fbbf24;">—</span></span>
+                        <div id="collapse-btn" class="collapse-btn">−</div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 6px; margin-top: 6px; font-size: 10px; background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 20px; width: fit-content;">
-                    <span id="usd-header" class="clickable" style="color: #60a5fa;">🇺🇸 --</span>
-                    <span style="color: #475569;">|</span>
-                    <span id="eur-header" class="clickable" style="color: #60a5fa;">🇪🇺 --</span>
-                    <span style="color: #475569;">|</span>
-                    <span id="krw-header" class="clickable" style="color: #60a5fa;">🇰🇷 --</span>
-                    <span style="color: #475569;">|</span>
-                    <span id="usdt-header" class="clickable" style="color: #fbbf24; font-weight: 600;">💎 --</span>
+                <div style="display: flex; gap: 12px; margin-top: 8px; background: rgba(0,0,0,0.3); padding: 6px 12px; border-radius: 24px; width: fit-content;">
+                    <span id="usd-header" class="clickable" style="color: #60a5fa; font-size: 14px; font-weight: 600;">🇺🇸 --</span>
+                    <span style="color: #475569; font-size: 14px;">|</span>
+                    <span id="eur-header" class="clickable" style="color: #60a5fa; font-size: 14px; font-weight: 600;">🇪🇺 --</span>
+                    <span style="color: #475569; font-size: 14px;">|</span>
+                    <span id="krw-header" class="clickable" style="color: #60a5fa; font-size: 14px; font-weight: 600;">🇰🇷 --</span>
+                    <span style="color: #475569; font-size: 14px;">|</span>
+                    <span id="usdt-header" class="clickable" style="color: #fbbf24; font-size: 14px; font-weight: 700;">💎 --</span>
                 </div>
             </div>
             
             <div id="panel-full-content">
-                <!-- Основная информация (левая колонка - крупный шрифт, правая - значения) -->
+                <!-- Основная информация -->
                 <div style="margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                         <span style="color: #94a3b8; font-size: 15px; font-weight: 500;">📅 Год</span>
@@ -311,7 +331,7 @@
                     <span id="util-value" class="clickable" style="font-weight: 600; font-size: 14px;">—</span>
                 </div>
                 
-                <!-- Расходы (увеличенный шрифт в 2-3 раза) -->
+                <!-- Расходы -->
                 <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; margin-bottom: 8px;">
                     <div style="font-size: 13px; color: #94a3b8; margin-bottom: 8px; font-weight: 500;">📋 Расходы</div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -366,7 +386,7 @@
         if (dragHandle) {
             dragHandle.addEventListener('mousedown', (e) => {
                 if (e.button !== 0) return;
-                if (e.target.id === 'collapse-btn') return;
+                if (e.target.classList?.contains('collapse-btn')) return;
                 isDragging = true;
                 const rect = mainPanel.getBoundingClientRect();
                 dragOffsetX = e.clientX - rect.left;
@@ -408,14 +428,14 @@
                     collapsedContent.style.display = 'none';
                     mainPanel.style.width = '340px';
                     mainPanel.style.padding = '12px 16px';
-                    collapseBtn.textContent = '−';
+                    collapseBtn.innerHTML = '−';
                     isCollapsed = false;
                 } else {
                     fullContent.style.display = 'none';
                     collapsedContent.style.display = 'block';
                     mainPanel.style.width = '200px';
                     mainPanel.style.padding = '10px 14px';
-                    collapseBtn.textContent = '+';
+                    collapseBtn.innerHTML = '+';
                     isCollapsed = true;
                 }
             });
@@ -541,5 +561,5 @@
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Компактная панель с крупным шрифтом загружена v6.0');
+    console.log('[UI] Финальная панель загружена v7.0');
 })();
