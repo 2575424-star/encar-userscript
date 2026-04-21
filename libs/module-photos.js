@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Photos Module
 // @namespace    http://tampermonkey.net/
-// @version      4.0
-// @description  Поиск фото через API и сканирование
+// @version      5.0
+// @description  Поиск фото через генерацию URL (без HEAD-запросов)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        GM_xmlhttpRequest
@@ -44,78 +44,47 @@
         return null;
     }
     
-    // ========== ПОИСК ФОТО ЧЕРЕЗ API ==========
-    function fetchPhotosFromAPI(carId) {
-        return new Promise((resolve) => {
-            const apiUrl = `https://api.encar.com/v1/readside/vehicle/${carId}`;
-            
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: apiUrl,
-                timeout: 5000,
-                onload: function(response) {
-                    if (response.status === 200 && response.response) {
-                        try {
-                            const data = JSON.parse(response.response);
-                            if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-                                const photos = data.photos.map(p => p.path).filter(Boolean);
-                                console.log(`[Photos] API: ${photos.length} фото`);
-                                resolve(photos);
-                                return;
-                            }
-                        } catch(e) {}
-                    }
-                    resolve([]);
-                },
-                onerror: function() { resolve([]); }
-            });
-        });
-    }
-    
-    // ========== СКАНИРОВАНИЕ ФОТО (ПРЯМАЯ ГЕНЕРАЦИЯ) ==========
-    function generatePhotoUrls(carId) {
+    // ========== ГЕНЕРАЦИЯ ВСЕХ URL ФОТО (БЕЗ ПРОВЕРКИ) ==========
+    function generateAllPhotoUrls(carId) {
         const urls = [];
         const baseUrl = `https://ci.encar.com/carpicture/carpicture${carId.slice(-2)}/pic${carId.slice(0,4)}/${carId}_`;
         
+        // Генерируем с 001 по 030 (достаточно для 20 фото)
         for (let i = 1; i <= 30; i++) {
             const num = String(i).padStart(3, '0');
             urls.push(`${baseUrl}${num}.jpg`);
         }
         
-        console.log(`[Photos] Сгенерировано ${urls.length} URL`);
+        console.log(`[Photos] Сгенерировано ${urls.length} URL для carId ${carId}`);
         return urls;
     }
     
     // ========== ГЛАВНАЯ ФУНКЦИЯ ==========
     async function findAllPhotos() {
-        console.log('[Photos] Поиск фото...');
+        console.log('[Photos] Поиск фото (генерация URL)...');
         
-        // 1. Пробуем API
         const carId = findCarId();
-        if (carId) {
-            const apiPhotos = await fetchPhotosFromAPI(carId);
-            if (apiPhotos.length >= 3) {
-                photosList = apiPhotos.slice(0, 16);
-                Hub.set('photosList', photosList);
-                console.log(`[Photos] Найдено ${photosList.length} фото (API)`);
-                return photosList;
-            }
-            
-            // 2. Генерируем URL по шаблону
-            const generatedUrls = generatePhotoUrls(carId);
-            photosList = generatedUrls.slice(0, 16);
-            Hub.set('photosList', photosList);
-            console.log(`[Photos] Используем ${photosList.length} сгенерированных URL`);
-            return photosList;
+        if (!carId) {
+            console.warn('[Photos] CarId не найден');
+            photosList = [];
+            Hub.set('photosList', []);
+            return [];
         }
         
-        console.warn('[Photos] CarId не найден');
-        photosList = [];
-        Hub.set('photosList', []);
-        return [];
+        // Генерируем все возможные URL
+        const generatedUrls = generateAllPhotoUrls(carId);
+        
+        // Для отчёта берём первые 16 (или сколько есть)
+        photosList = generatedUrls.slice(0, 16);
+        Hub.set('photosList', photosList);
+        
+        console.log(`[Photos] Подготовлено ${photosList.length} URL для отчёта`);
+        console.log(`[Photos] Первые 5 URL:`, photosList.slice(0, 5));
+        
+        return photosList;
     }
     
-    // ========== ГЕНЕРАЦИЯ ОТЧЁТА ==========
+    // ========== ГЕНЕРАЦИЯ HTML ДЛЯ ОТЧЁТА ==========
     function generatePhotosHTML(photoUrls) {
         if (!photoUrls.length) {
             return '<div class="page"><div class="photos-header">📸 Фотографии отсутствуют</div></div>';
@@ -136,7 +105,8 @@
             
             for (let i = 0; i < photosPerPage; i++) {
                 if (i < pagePhotos.length) {
-                    pagesHTML += `<div class="photo-cell"><img src="${pagePhotos[i]}" alt="Фото" loading="lazy" onerror="this.style.opacity='0.3'"></div>`;
+                    const cleanUrl = pagePhotos[i].split('?')[0];
+                    pagesHTML += `<div class="photo-cell"><img src="${cleanUrl}" alt="Фото ${page + i + 1}" loading="lazy" onerror="this.style.opacity='0.3'"></div>`;
                 } else {
                     pagesHTML += `<div class="photo-cell empty"></div>`;
                 }
@@ -147,6 +117,7 @@
         return pagesHTML;
     }
     
+    // ========== ФОРМАТИРОВАНИЕ ==========
     function formatVolume(cc) {
         if (!cc) return null;
         const liters = cc / 1000;
@@ -159,12 +130,13 @@
         return `${mileage.toLocaleString()} km`;
     }
     
+    // ========== ПЕЧАТЬ ОТЧЁТА ==========
     async function printReport() {
-        console.log('[Photos] Генерация КП...');
+        console.log('[Photos] Генерация коммерческого предложения...');
         
         if (!photosList.length) {
             const loadingDiv = document.createElement('div');
-            loadingDiv.textContent = '🔍 Поиск фотографий...';
+            loadingDiv.textContent = '🔍 Подготовка фотографий...';
             loadingDiv.style.cssText = 'position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#1e293b; color:white; padding:15px 25px; border-radius:12px; z-index:10030;';
             document.body.appendChild(loadingDiv);
             await findAllPhotos();
@@ -270,7 +242,7 @@ ${photosHTML}
     
     unsafeWindow.EncarPhotos = { print: printReport, find: findAllPhotos, getPhotos: () => photosList };
     
-    setTimeout(() => findAllPhotos().then(p => console.log(`[Photos] Найдено ${p.length} фото`)), 2000);
+    setTimeout(() => findAllPhotos().then(p => console.log(`[Photos] Готово ${p.length} URL для фото`)), 2000);
     
-    console.log('[Photos] Модуль загружен v4.0');
+    console.log('[Photos] Модуль загружен v5.0');
 })();
