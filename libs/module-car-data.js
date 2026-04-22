@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Encar Car Data Module FIXED
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  Улучшенный сбор данных с Encar
+// @version      3.0
+// @description  Улучшенный сбор данных с Encar + страховые выплаты
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest
+// @connect      api.encar.com
 // ==/UserScript==
 
 (function() {
@@ -18,6 +19,7 @@
     }
 
     const Hub = unsafeWindow.EncarHub;
+    let accidentDetails = null;
 
     // ========== РАСШИРЕННЫЙ ПЕРЕВОД МАРОК ==========
     const BRAND_TRANSLATIONS = {
@@ -44,7 +46,6 @@
     function getCarBrandAndModel() {
         let brand = null, model = null;
 
-        // Способ 1: из PRELOADED_STATE
         if (window.__PRELOADED_STATE__) {
             try {
                 const cat = window.__PRELOADED_STATE__.cars?.base?.category ||
@@ -60,31 +61,22 @@
             } catch(e) {}
         }
 
-        // Способ 2: из скриптов с регулярками
         const scripts = document.querySelectorAll('script');
         for (const s of scripts) {
             const txt = s.textContent;
-
-            // Ищем manufacturerEnglishName
             let m = txt.match(/"manufacturerEnglishName":"([^"]+)"/);
             if (m && !brand) brand = m[1];
-
             m = txt.match(/"manufacturerName":"([^"]+)"/);
             if (m && !brand) brand = m[1];
-
             m = txt.match(/"modelEnglishName":"([^"]+)"/);
             if (m && !model) model = m[1];
-
             m = txt.match(/"modelName":"([^"]+)"/);
             if (m && !model) model = m[1];
-
             if (brand && model) break;
         }
 
-        // Способ 3: из заголовка страницы
         if (!brand || !model) {
             const title = document.title;
-            // Пример: "BMW X6 (G06) - 2023년형 - 엔카"
             const match = title.match(/^([A-Z]+)\s+([^(]+)/);
             if (match) {
                 brand = match[1];
@@ -98,11 +90,10 @@
         return (brand || model) ? { brand, model } : null;
     }
 
-    // ========== ГОД И МЕСЯЦ (УЛУЧШЕННЫЙ) ==========
+    // ========== ГОД И МЕСЯЦ ==========
     function getCarYearMonth() {
         let year = null, month = null;
 
-        // Способ 1: из PRELOADED_STATE
         if (window.__PRELOADED_STATE__) {
             try {
                 const cat = window.__PRELOADED_STATE__.cars?.base?.category;
@@ -122,12 +113,9 @@
             } catch(e) {}
         }
 
-        // Способ 2: из скриптов
         const scripts = document.querySelectorAll('script');
         for (const s of scripts) {
             const txt = s.textContent;
-
-            // Ищем yearMonth
             let m = txt.match(/"yearMonth":"(\d{4})(\d{2})"/);
             if (m) {
                 year = m[1];
@@ -135,30 +123,21 @@
                 console.log(`[CarData] Год/месяц способ 2: ${year}/${month}`);
                 return { year, month };
             }
-
-            // Ищем отдельно year и month
             m = txt.match(/"year":(\d{4})/);
             if (m && !year) year = m[1];
-
             m = txt.match(/"month":(\d{1,2})/);
             if (m && !month) month = m[1].padStart(2, '0');
-
             if (year) break;
         }
 
-        // Способ 3: из текста страницы
         if (!year) {
             const body = document.body.innerText;
-
-            // Поиск "2023년" или "2023년형"
             let m = body.match(/(\d{4})년형?/);
             if (m) {
                 year = m[1];
                 console.log(`[CarData] Год способ 3: ${year}`);
                 return { year, month };
             }
-
-            // Поиск в формате "2023.06"
             m = body.match(/(\d{4})\.(\d{2})/);
             if (m) {
                 year = m[1];
@@ -168,15 +147,13 @@
             }
         }
 
-        console.log(`[CarData] Год не найден, year=${year}, month=${month}`);
         return year ? { year, month } : null;
     }
 
-    // ========== VIN НОМЕР (РАСШИРЕННЫЙ ПОИСК) ==========
+    // ========== VIN НОМЕР ==========
     function getVinNumber() {
         let vin = null;
 
-        // Способ 1: из PRELOADED_STATE
         if (window.__PRELOADED_STATE__) {
             try {
                 vin = window.__PRELOADED_STATE__.cars?.base?.vehicleNo ||
@@ -190,14 +167,12 @@
             } catch(e) {}
         }
 
-        // Способ 2: из URL
         const urlMatch = window.location.href.match(/[?&]vin=([A-HJ-NPR-Z0-9]{17})/i);
         if (urlMatch) {
             console.log(`[CarData] VIN способ 2: ${urlMatch[1]}`);
             return urlMatch[1].toUpperCase();
         }
 
-        // Способ 3: из текста страницы
         const body = document.body.innerText;
         let match = body.match(/[A-HJ-NPR-Z0-9]{17}/i);
         if (match) {
@@ -205,26 +180,15 @@
             return match[0].toUpperCase();
         }
 
-        // Способ 4: из скриптов с конкретными ключами
         const scripts = document.querySelectorAll('script');
         for (const script of scripts) {
             const txt = script.textContent;
-
             let m = txt.match(/"vehicleNo":"([A-Z0-9]{17})"/);
-            if (m) {
-                vin = m[1];
-                break;
-            }
+            if (m) { vin = m[1]; break; }
             m = txt.match(/"vin":"([A-Z0-9]{17})"/);
-            if (m) {
-                vin = m[1];
-                break;
-            }
+            if (m) { vin = m[1]; break; }
             m = txt.match(/[A-HJ-NPR-Z0-9]{17}/);
-            if (m && m[0].length === 17) {
-                vin = m[0];
-                break;
-            }
+            if (m && m[0].length === 17) { vin = m[0]; break; }
         }
 
         if (vin && vin.length === 17) {
@@ -256,15 +220,13 @@
             console.log(`[CarData] Пробег способ 2: ${mileage}`);
             return mileage;
         }
-
         return null;
     }
 
-    // ========== ОБЪЁМ ДВИГАТЕЛЯ (УЛУЧШЕННЫЙ) ==========
+    // ========== ОБЪЁМ ДВИГАТЕЛЯ ==========
     function getEngineVolume() {
         let volume = null;
 
-        // Способ 1: из PRELOADED_STATE
         if (window.__PRELOADED_STATE__) {
             try {
                 volume = window.__PRELOADED_STATE__.cars?.base?.spec?.displacement;
@@ -276,20 +238,15 @@
             } catch(e) {}
         }
 
-        // Способ 2: из скриптов
         const scripts = document.querySelectorAll('script');
         for (const s of scripts) {
             const txt = s.textContent;
-
-            // Ищем displacement
             let m = txt.match(/"displacement"\s*:\s*(\d+)/);
             if (m) {
                 volume = Math.ceil(parseInt(m[1]) / 100) * 100;
                 console.log(`[CarData] Объём способ 2: ${volume}cc`);
                 return volume;
             }
-
-            // Ищем engineCapacity
             m = txt.match(/"engineCapacity"\s*:\s*(\d+)/);
             if (m) {
                 volume = Math.ceil(parseInt(m[1]) / 100) * 100;
@@ -298,7 +255,6 @@
             }
         }
 
-        // Способ 3: из текста страницы
         const body = document.body.innerText;
         let match = body.match(/(\d{3,4})\s*cc/i);
         if (match) {
@@ -307,7 +263,6 @@
             return volume;
         }
 
-        // Способ 4: из модели (например, "520d" -> 2000cc, "530i" -> 3000cc)
         const model = Hub.get('carModel');
         if (model) {
             const modelMatch = model.match(/(\d{3})/);
@@ -320,9 +275,8 @@
                 else if (modelCode >= 320 && modelCode < 330) volume = 2000;
                 else if (modelCode >= 330 && modelCode < 340) volume = 3000;
                 else if (modelCode >= 340) volume = 3000;
-
                 if (volume) {
-                    console.log(`[CarData] Объём способ 4 (из модели ${modelCode}): ${volume}cc`);
+                    console.log(`[CarData] Объём способ 4: ${volume}cc`);
                     return volume;
                 }
             }
@@ -369,7 +323,6 @@
             console.log(`[CarData] Мощность способ 3: ${hp}hp`);
             return { hp: hp, kw: Math.round(hp / 1.341) };
         }
-
         return null;
     }
 
@@ -398,7 +351,6 @@
             console.log(`[CarData] Цена способ 2: ${price.toLocaleString()} ₩`);
             return price;
         }
-
         return null;
     }
 
@@ -425,6 +377,113 @@
         return null;
     }
 
+    // ========== СТРАХОВЫЕ ВЫПЛАТЫ (ДОБАВЛЕННЫЙ БЛОК) ==========
+    function getVehicleNumber(carId, callback) {
+        const body = document.body.innerText;
+        let match = body.match(/차량번호\s*:?\s*([가-힣0-9]+)/);
+        if (match && match[1]) { callback(match[1]); return; }
+        if (window.__PRELOADED_STATE__?.cars?.base?.carNumber) {
+            callback(window.__PRELOADED_STATE__.cars.base.carNumber);
+            return;
+        }
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: `https://api.encar.com/v1/readside/inspection/vehicle/${carId}`,
+            headers: { 'Accept': 'application/json' },
+            onload: (resp) => {
+                if (resp.status === 200 && resp.response) {
+                    try {
+                        const data = JSON.parse(resp.response);
+                        const carNo = data.master?.detail?.carNo;
+                        if (carNo) { callback(carNo); return; }
+                    } catch(e) {}
+                }
+                callback(null);
+            },
+            onerror: () => callback(null)
+        });
+    }
+
+    function fetchAccidentData(carId, vehicleNo, callback) {
+        const url = `https://api.encar.com/v1/readside/record/vehicle/${carId}/open?vehicleNo=${encodeURIComponent(vehicleNo)}`;
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: url,
+            headers: { 'Accept': 'application/json' },
+            onload: (resp) => {
+                if (resp.status === 200 && resp.response) {
+                    try {
+                        const data = JSON.parse(resp.response);
+                        const accidents = data.accidents || [];
+                        let totalPaymentWon = 0;
+                        for (const acc of accidents) {
+                            totalPaymentWon += (acc.partCost || 0) + (acc.laborCost || 0) + (acc.paintingCost || 0);
+                        }
+                        const usdToKrw = Hub.get('usdToKrw') || 1473;
+                        const totalPaymentUsd = Math.round(totalPaymentWon / usdToKrw);
+                        callback({ count: data.myAccidentCnt || 0, totalWon: totalPaymentWon, totalUsd: totalPaymentUsd, details: accidents });
+                    } catch(e) { callback(null); }
+                } else { callback(null); }
+            },
+            onerror: () => callback(null)
+        });
+    }
+
+    function formatAccidentTotal(accidentInfo) {
+        if (!accidentInfo || accidentInfo.count === undefined) return '—';
+        if (accidentInfo.count === 0) return 'Без ДТП';
+        return `${accidentInfo.totalUsd.toLocaleString()} $`;
+    }
+
+    function updateAccidentPanel(accidentInfo) {
+        const accidentSpan = document.getElementById('accident-value');
+        const accidentDetailsDiv = document.getElementById('accident-details');
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        
+        if (accidentSpan) accidentSpan.textContent = formatAccidentTotal(accidentInfo);
+        
+        if (accidentDetailsDiv && accidentInfo && accidentInfo.details && accidentInfo.details.length > 0) {
+            accidentDetailsDiv.innerHTML = accidentInfo.details.map((acc, idx) => {
+                const part = acc.partCost || 0, labor = acc.laborCost || 0, paint = acc.paintingCost || 0;
+                const totalWon = part + labor + paint;
+                const totalUsd = Math.round(totalWon / usdToKrw);
+                return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
+                    <b>Случай ${idx+1}</b> (${acc.date || '—'})<br>
+                    💰 Выплата: ${totalUsd.toLocaleString()} $ (${totalWon.toLocaleString()} 원)<br>
+                    🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
+                    🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
+                    🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
+                </div>`;
+            }).join('');
+        } else if (accidentDetailsDiv && accidentInfo && accidentInfo.count === 0) {
+            accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
+        }
+        
+        // Сохраняем в Hub для UI
+        Hub.set('accidentTotal', formatAccidentTotal(accidentInfo));
+        Hub.set('accidentDetails', accidentInfo?.details || []);
+        Hub.emit('accidentData:loaded', accidentInfo);
+    }
+
+    function loadAccidentData() {
+        const carId = getCarId();
+        if (!carId) { 
+            updateAccidentPanel({ count: 0, totalWon: 0, totalUsd: 0, details: [] }); 
+            return; 
+        }
+        getVehicleNumber(carId, (vehicleNo) => {
+            if (!vehicleNo) { 
+                updateAccidentPanel({ count: 0, totalWon: 0, totalUsd: 0, details: [] }); 
+                return; 
+            }
+            fetchAccidentData(carId, vehicleNo, (info) => {
+                accidentDetails = info || { count: 0, totalWon: 0, totalUsd: 0, details: [] };
+                updateAccidentPanel(accidentDetails);
+                console.log(`[CarData] Страховые выплаты: ${accidentDetails.totalUsd?.toLocaleString() || 0} $, случаев: ${accidentDetails.count}`);
+            });
+        });
+    }
+
     // ========== ГЛАВНАЯ ФУНКЦИЯ СБОРА ==========
     function collectAllCarData() {
         console.log('[CarData] Начало сбора данных...');
@@ -439,7 +498,6 @@
         const views = getCarViews();
         const powerData = getCarPower();
 
-        // Сохраняем в хаб
         if (carInfo) {
             Hub.set('carBrand', carInfo.brand);
             Hub.set('carModel', carInfo.model);
@@ -475,6 +533,9 @@
         });
 
         Hub.emit('carData:ready', Hub.getAll());
+        
+        // ЗАГРУЖАЕМ СТРАХОВЫЕ ВЫПЛАТЫ
+        loadAccidentData();
     }
 
     // Загрузка сохранённой мощности
@@ -509,9 +570,7 @@
 
     // Запуск
     loadSavedPower();
-
-    // Небольшая задержка для загрузки страницы
     setTimeout(() => collectAllCarData(), 500);
 
-    console.log('[CarData] Модуль загружен, сбор начнётся через 500ms');
+    console.log('[CarData] Модуль загружен v3.0 (со страховыми выплатами)');
 })();
