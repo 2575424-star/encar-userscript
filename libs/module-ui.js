@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      19.0
-// @description  Финальная версия панели с калькулятором наценки
+// @version      18.1
+// @description  Финальная версия панели с детальными расходами
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -117,11 +117,6 @@
         .expense-value:hover { text-decoration: underline; }
         .accident-header { cursor: pointer; transition: all 0.2s ease; }
         .accident-header:hover { opacity: 0.8; }
-        .calc-header { cursor: pointer; transition: all 0.2s ease; background: rgba(251,191,36,0.15); border-radius: 10px; }
-        .calc-header:hover { background: rgba(251,191,36,0.25); }
-        .calc-content { margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 8px; }
-        .calc-input { width: 100px; padding: 4px 8px; background: #0f172a; color: white; border: 1px solid #475569; border-radius: 6px; text-align: right; }
-        .calc-result { font-size: 16px; font-weight: 800; color: #fbbf24; }
     `);
     
     function formatVolume(cc) { if (!cc) return '—'; const liters = cc / 1000; return Number.isInteger(liters) ? `${liters}.0L` : `${liters.toFixed(1)}L`; }
@@ -177,7 +172,12 @@
         const totalRFSpan = mainPanel.querySelector('#total-rf');
         if (totalRFSpan) totalRFSpan.textContent = `${formatNumber(calculateTotalRFRUB())} ₽`;
         
-        const euroPrice = Hub.get('selectedEuroPrice');
+        // Приоритет: ручное значение из localStorage, затем из Hub
+        let customEuros = localStorage.getItem('encar_custom_euro_price');
+        let euroPrice = Hub.get('selectedEuroPrice');
+        if (customEuros && !isNaN(parseFloat(customEuros))) {
+            euroPrice = parseFloat(customEuros);
+        }
         const priceEuroSpan = mainPanel.querySelector('#price-euro');
         if (priceEuroSpan) priceEuroSpan.textContent = euroPrice ? `${formatNumber(euroPrice)} €` : '—';
         
@@ -211,57 +211,6 @@
         const usdtRate = Hub.get('usdtRate') || 0;
         const usdtHeader = mainPanel.querySelector('#usdt-header');
         if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
-        
-        // Обновляем калькулятор, если он открыт
-        const calcContent = document.getElementById('calc-content');
-        if (calcContent && calcContent.style.display === 'block') {
-            recalcInPanel();
-        }
-    }
-    
-    // Функция пересчёта в панели
-    function recalcInPanel() {
-        const carPriceUSD = Hub.get('carPriceKrw') ? Math.round(Hub.get('carPriceKrw') / (Hub.get('usdToKrw') || 1473)) : 0;
-        const currentTpo = Hub.get('calculatedTpo') || 0;
-        const currentTotal = Hub.get('totalPrice') || 0;
-        const currentUsdtRate = Hub.get('usdtRate') || 90;
-        
-        const markupPercent = parseFloat(document.getElementById('calc-markup')?.value) || -4;
-        const koreaExp = parseFloat(document.getElementById('calc-korea')?.value) || 4000;
-        const bishkekExp = parseFloat(document.getElementById('calc-bishkek')?.value) || 2000;
-        const docsRf = parseFloat(document.getElementById('calc-docs')?.value) || 85000;
-        
-        const markupAmount = carPriceUSD * (markupPercent / 100);
-        const totalUSD = carPriceUSD + markupAmount + koreaExp + currentTpo + bishkekExp;
-        const calcRate = currentUsdtRate - 1;
-        const totalRUB = totalUSD * calcRate + docsRf;
-        const difference = totalRUB - currentTotal;
-        
-        const resultSpan = document.getElementById('calc-result-value');
-        const diffSpan = document.getElementById('calc-difference-value');
-        if (resultSpan) resultSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
-        if (diffSpan) {
-            diffSpan.textContent = `${Math.round(difference).toLocaleString()} ₽`;
-            diffSpan.style.color = difference > 0 ? '#22c55e' : (difference < 0 ? '#ef4444' : '#fbbf24');
-        }
-    }
-    
-    // Применить расходы
-    function applyCalcExpenses() {
-        const koreaExp = parseFloat(document.getElementById('calc-korea')?.value) || 4000;
-        const bishkekExp = parseFloat(document.getElementById('calc-bishkek')?.value) || 2000;
-        const docsRf = parseFloat(document.getElementById('calc-docs')?.value) || 85000;
-        
-        Hub.set('koreaLogistics', koreaExp);
-        Hub.set('servicesBishkek', bishkekExp);
-        Hub.set('docsRf', docsRf);
-        Hub.emit('any:changed', {});
-        
-        const notif = document.createElement('div');
-        notif.textContent = '✅ Расходы применены!';
-        notif.style.cssText = 'position:fixed; bottom:100px; right:20px; background:#22c55e; color:white; padding:10px 20px; border-radius:10px; z-index:100000; font-size:13px; animation:fadeOutNotif 2s ease-out forwards;';
-        document.body.appendChild(notif);
-        setTimeout(() => notif.remove(), 2000);
     }
     
     function updateDetailedExpenses() {
@@ -379,12 +328,18 @@
                     <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span style="color:#94a3b8;font-size:15px;font-weight:500;">🔢 VIN</span><span id="info-vin" class="clickable" style="font-family:monospace;font-size:13px;font-weight:500;cursor:pointer;">—</span></div>
                 </div>
                 
+                <!-- Страховые выплаты (раскрывающийся блок) -->
                 <div style="margin-bottom:10px;">
                     <div id="accident-header" class="accident-header" style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.05);border-radius:10px;padding:6px 10px;">
                         <span style="color:#94a3b8;font-size:14px;font-weight:500;">💸 Страховые выплаты:</span>
-                        <div style="display:flex;align-items:center;gap:6px;"><span id="accident-value" style="color:#fbbf24;font-weight:600;font-size:14px;">загрузка...</span><span id="accident-arrow" style="font-size:12px;color:#94a3b8;">▼</span></div>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span id="accident-value" style="color:#fbbf24;font-weight:600;font-size:14px;">загрузка...</span>
+                            <span id="accident-arrow" style="font-size:12px;color:#94a3b8;">▼</span>
+                        </div>
                     </div>
-                    <div id="accident-content" style="display:none;margin-top:6px;padding:8px;background:rgba(0,0,0,0.3);border-radius:8px;"><div id="accident-details" style="font-size:12px;color:#cbd5e1;">Загрузка...</div></div>
+                    <div id="accident-content" style="display:none;margin-top:6px;padding:8px;background:rgba(0,0,0,0.3);border-radius:8px;">
+                        <div id="accident-details" style="font-size:12px;color:#cbd5e1;max-height:200px;overflow-y:auto;">Загрузка...</div>
+                    </div>
                 </div>
                 
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
@@ -392,6 +347,7 @@
                     <span id="price-value" style="color:#fbbf24;font-weight:700;font-size:15px;">—</span>
                 </div>
                 
+                <!-- Расходы Корея (раскрывающийся) -->
                 <div style="margin-bottom:8px;">
                     <div id="korea-header" class="expense-header" style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.05);border-radius:10px;padding:8px 10px;">
                         <span style="font-size:14px;font-weight:500;">🇰🇷 Расходы Корея</span>
@@ -400,6 +356,7 @@
                     <div id="korea-content" style="display:none;margin-top:6px;"><div id="korea-details-inner" class="expense-content"></div></div>
                 </div>
                 
+                <!-- Расходы Бишкек (раскрывающийся) -->
                 <div style="margin-bottom:8px;">
                     <div id="bishkek-header" class="expense-header" style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.05);border-radius:10px;padding:8px 10px;">
                         <span style="font-size:14px;font-weight:500;">🇰🇬 Расходы Бишкек</span>
@@ -408,6 +365,7 @@
                     <div id="bishkek-content" style="display:none;margin-top:6px;"><div id="bishkek-details-inner" class="expense-content"></div></div>
                 </div>
                 
+                <!-- Расходы РФ (раскрывающийся) -->
                 <div style="margin-bottom:8px;">
                     <div id="rf-header" class="expense-header" style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.05);border-radius:10px;padding:8px 10px;">
                         <span style="font-size:14px;font-weight:500;">🇷🇺 Расходы РФ</span>
@@ -418,63 +376,26 @@
                 
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;">
                     <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:500;">🏛️ Таможня Киргизия</div>
-                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                         <span style="font-size:14px;font-weight:500;">💰 Таможенная стоимость:</span>
-                        <div><span id="price-euro" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;text-decoration:underline;cursor:pointer;">—</span><span id="price-arrow" style="margin-left:3px;font-size:9px;color:#94a3b8;cursor:pointer;">▼</span></div>
+                        <div>
+                            <span id="price-euro" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;text-decoration:underline;cursor:pointer;">—</span>
+                            <span id="price-arrow" style="margin-left:3px;font-size:9px;color:#94a3b8;cursor:pointer;">▼</span>
+                        </div>
                     </div>
-                    <div id="price-content" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);"><div id="price-content-inner" style="font-size:11px;">Загрузка...</div></div>
-                    <div style="display:flex;justify-content:space-between;"><span style="font-size:14px;font-weight:500;">🏛️ ТПО:</span><span id="tpo-value" class="clickable" style="font-weight:700;font-size:15px;">—</span></div>
+                    <div id="price-content" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <div id="price-content-inner" style="font-size:11px;">Загрузка...</div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;">
+                        <span style="font-size:14px;font-weight:500;">🏛️ ТПО:</span>
+                        <span id="tpo-value" class="clickable" style="font-weight:700;font-size:15px;">—</span>
+                    </div>
                 </div>
                 
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;">
-                    <div style="display:flex;justify-content:space-between;"><span style="font-size:14px;font-weight:500;">♻️ Утильсбор:</span><span id="util-value" class="clickable" style="font-weight:700;font-size:15px;">—</span></div>
-                </div>
-                
-                <!-- КАЛЬКУЛЯТОР НАЦЕНКИ (раскрывающийся) -->
-                <div style="margin-bottom:8px;">
-                    <div id="calc-header" class="calc-header" style="display:flex;justify-content:space-between;align-items:center;background:rgba(251,191,36,0.15);border-radius:10px;padding:8px 10px;">
-                        <span style="font-size:14px;font-weight:600;color:#fbbf24;">🧮 Калькулятор наценки</span>
-                        <span id="calc-arrow" style="font-size:12px;color:#fbbf24;">▼</span>
-                    </div>
-                    <div id="calc-content" style="display:none;margin-top:6px;">
-                        <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:10px;">
-                            <div style="margin-bottom:8px;">
-                                <label style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="color:#94a3b8;font-size:12px;">📈 Наценка (%):</span>
-                                    <input type="number" id="calc-markup" value="-4" step="0.5" class="calc-input" style="width:80px;">
-                                </label>
-                                <div style="font-size:10px;color:#64748b;">отрицательное = вычитаем</div>
-                            </div>
-                            <div style="margin-bottom:8px;">
-                                <label style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="color:#94a3b8;font-size:12px;">📦 Расходы Корея ($):</span>
-                                    <input type="number" id="calc-korea" value="4000" step="100" class="calc-input" style="width:80px;">
-                                </label>
-                            </div>
-                            <div style="margin-bottom:8px;">
-                                <label style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="color:#94a3b8;font-size:12px;">🇰🇬 Расходы Бишкек ($):</span>
-                                    <input type="number" id="calc-bishkek" value="2000" step="100" class="calc-input" style="width:80px;">
-                                </label>
-                            </div>
-                            <div style="margin-bottom:8px;">
-                                <label style="display:flex;justify-content:space-between;align-items:center;">
-                                    <span style="color:#94a3b8;font-size:12px;">📄 Документы РФ (₽):</span>
-                                    <input type="number" id="calc-docs" value="85000" step="1000" class="calc-input" style="width:80px;">
-                                </label>
-                            </div>
-                            <div style="background:rgba(251,191,36,0.1);border-radius:8px;padding:8px;margin-bottom:8px;">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                                    <span style="color:#94a3b8;font-size:11px;">💰 РАСЧЁТНАЯ ЦЕНА:</span>
-                                    <span id="calc-result-value" style="font-size:14px;font-weight:800;color:#fbbf24;">0 ₽</span>
-                                </div>
-                                <div style="display:flex;justify-content:space-between;">
-                                    <span style="color:#94a3b8;font-size:11px;">🏷️ НАЦЕНКА:</span>
-                                    <span id="calc-difference-value" style="font-size:14px;font-weight:800;">0 ₽</span>
-                                </div>
-                            </div>
-                            <button id="calc-apply-btn" style="width:100%;background:#fbbf24;border:none;padding:6px;border-radius:8px;font-weight:600;cursor:pointer;color:#0f172a;font-size:12px;">✅ Применить расходы</button>
-                        </div>
+                    <div style="display:flex;justify-content:space-between;">
+                        <span style="font-size:14px;font-weight:500;">♻️ Утильсбор:</span>
+                        <span id="util-value" class="clickable" style="font-weight:700;font-size:15px;">—</span>
                     </div>
                 </div>
                 
@@ -485,8 +406,9 @@
                     </div>
                 </div>
                 
-                <div style="margin-top:12px;">
-                    <button id="print-report-btn" style="width:100%;background:#fbbf24;border:none;padding:8px 0;border-radius:10px;font-weight:700;cursor:pointer;color:#0f172a;font-size:13px;">🖨️ Коммерческое предложение</button>
+                <div style="display:flex;gap:8px;margin-top:12px;">
+                    <button id="print-report-btn" style="flex:1;background:#fbbf24;border:none;padding:8px 0;border-radius:10px;font-weight:700;cursor:pointer;color:#0f172a;font-size:13px;">🖨️ Коммерческое предложение</button>
+                    <button id="refresh-panel-btn" style="background:rgba(255,255,255,0.1);border:none;padding:8px 12px;border-radius:10px;font-weight:600;cursor:pointer;color:#f1f5f9;font-size:13px;">🔄</button>
                 </div>
             </div>
             <div id="panel-collapsed-content" style="display:none;">
@@ -499,7 +421,7 @@
         
         document.body.appendChild(mainPanel);
         
-        // Drag & Drop
+        // ========== DRAG & DROP ==========
         const dragHandle = document.getElementById('drag-handle');
         if (dragHandle) {
             dragHandle.addEventListener('mousedown', (e) => {
@@ -528,7 +450,7 @@
         
         document.addEventListener('mouseup', () => { if (isDragging) { isDragging = false; mainPanel.style.cursor = 'move'; } });
         
-        // Раскрывающиеся блоки расходов
+        // ========== РАСКРЫВАЮЩИЕСЯ БЛОКИ РАСХОДОВ ==========
         const koreaHeader = document.getElementById('korea-header'), koreaContent = document.getElementById('korea-content'), koreaArrow = document.getElementById('korea-arrow');
         if (koreaHeader && koreaContent && koreaArrow) koreaHeader.onclick = () => { const isHidden = koreaContent.style.display === 'none'; koreaContent.style.display = isHidden ? 'block' : 'none'; koreaArrow.innerHTML = isHidden ? '▲' : '▼'; if (isHidden) updateDetailedExpenses(); };
         
@@ -538,7 +460,7 @@
         const rfHeader = document.getElementById('rf-header'), rfContent = document.getElementById('rf-content'), rfArrow = document.getElementById('rf-arrow');
         if (rfHeader && rfContent && rfArrow) rfHeader.onclick = () => { const isHidden = rfContent.style.display === 'none'; rfContent.style.display = isHidden ? 'block' : 'none'; rfArrow.innerHTML = isHidden ? '▲' : '▼'; if (isHidden) updateDetailedExpenses(); };
         
-        // Раскрывающийся блок страховых выплат
+        // ========== РАСКРЫВАЮЩИЙСЯ БЛОК СТРАХОВЫХ ВЫПЛАТ ==========
         const accidentHeader = document.getElementById('accident-header');
         const accidentContent = document.getElementById('accident-content');
         const accidentArrow = document.getElementById('accident-arrow');
@@ -549,22 +471,26 @@
                     accidentArrow.innerHTML = '▲';
                     const details = Hub.get('accidentDetails');
                     const detailsDiv = document.getElementById('accident-details');
-                    if (detailsDiv && details && details.length) {
-                        const usdToKrw = Hub.get('usdToKrw') || 1473;
-                        detailsDiv.innerHTML = details.map((acc, idx) => {
-                            const part = acc.partCost || 0, labor = acc.laborCost || 0, paint = acc.paintingCost || 0;
-                            const totalWon = part + labor + paint;
-                            const totalUsd = Math.round(totalWon / usdToKrw);
-                            return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
-                                <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
-                                💰 Выплата: ${totalUsd.toLocaleString()} $<br>
-                                🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
-                                🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
-                                🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
-                            </div>`;
-                        }).join('');
-                    } else if (detailsDiv) {
-                        detailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
+                    if (detailsDiv) {
+                        if (details && details.length) {
+                            const usdToKrw = Hub.get('usdToKrw') || 1473;
+                            detailsDiv.innerHTML = details.map((acc, idx) => {
+                                const part = acc.partCost || 0;
+                                const labor = acc.laborCost || 0;
+                                const paint = acc.paintingCost || 0;
+                                const totalWon = part + labor + paint;
+                                const totalUsd = Math.round(totalWon / usdToKrw);
+                                return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
+                                    <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
+                                    💰 Выплата: ${totalUsd.toLocaleString()} $<br>
+                                    🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
+                                    🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
+                                    🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
+                                </div>`;
+                            }).join('');
+                        } else {
+                            detailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
+                        }
                     }
                 } else {
                     accidentContent.style.display = 'none';
@@ -573,52 +499,66 @@
             };
         }
         
-        // Раскрывающийся блок калькулятора
-        const calcHeader = document.getElementById('calc-header');
-        const calcContent = document.getElementById('calc-content');
-        const calcArrow = document.getElementById('calc-arrow');
-        if (calcHeader && calcContent && calcArrow) {
-            calcHeader.onclick = () => {
-                const isHidden = calcContent.style.display === 'none';
-                calcContent.style.display = isHidden ? 'block' : 'none';
-                calcArrow.innerHTML = isHidden ? '▲' : '▼';
-                if (isHidden) {
-                    recalcInPanel();
-                    // Добавляем обработчики
-                    document.getElementById('calc-markup').oninput = () => recalcInPanel();
-                    document.getElementById('calc-korea').oninput = () => recalcInPanel();
-                    document.getElementById('calc-bishkek').oninput = () => recalcInPanel();
-                    document.getElementById('calc-docs').oninput = () => recalcInPanel();
-                    document.getElementById('calc-apply-btn').onclick = () => applyCalcExpenses();
-                }
-            };
-        }
-        
-        // Сворачивание панели
+        // ========== СВОРАЧИВАНИЕ ПАНЕЛИ ==========
         const collapseBtn = document.getElementById('collapse-btn'), fullContent = document.getElementById('panel-full-content'), collapsedContent = document.getElementById('panel-collapsed-content');
         if (collapseBtn && fullContent && collapsedContent) collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); if (isCollapsed) { fullContent.style.display = 'block'; collapsedContent.style.display = 'none'; mainPanel.style.width = '380px'; mainPanel.style.padding = '12px 16px'; collapseBtn.innerHTML = '−'; isCollapsed = false; } else { fullContent.style.display = 'none'; collapsedContent.style.display = 'block'; mainPanel.style.width = '200px'; mainPanel.style.padding = '10px 14px'; collapseBtn.innerHTML = '+'; isCollapsed = true; } });
         
-        // Обработчики
+        // ========== ОБРАБОТЧИКИ КУРСОВ ==========
         document.getElementById('usd-header').onclick = () => { const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5); if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val)); };
         document.getElementById('eur-header').onclick = () => { const val = prompt('Курс EUR/RUB:', Hub.get('eurRate') || 104.2); if (val && !isNaN(parseFloat(val))) Hub.set('eurRate', parseFloat(val)); };
         document.getElementById('krw-header').onclick = () => { const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473); if (val && !isNaN(parseFloat(val))) { Hub.set('usdToKrw', parseFloat(val)); updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); } };
         document.getElementById('usdt-header').onclick = () => { const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90); if (val && !isNaN(parseFloat(val))) Hub.set('usdtRate', parseFloat(val)); };
         
+        // ========== РЕДАКТИРУЕМЫЕ ПОЛЯ ==========
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
         document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); };
         document.getElementById('util-value').onclick = () => { const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || ''; const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current); if (val === '') Hub.set('manualUtilizationFee', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val)); };
         
-        // Меню цены
+        // ========== МЕНЮ ЦЕНЫ И РУЧНОЙ ВВОД ==========
         const priceSpan = document.getElementById('price-euro');
         const priceContent = document.getElementById('price-content');
         const priceArrow = document.getElementById('price-arrow');
+        
         if (priceSpan && priceContent && priceArrow) {
-            priceArrow.onclick = (e) => { e.stopPropagation(); if (priceContent.style.display === 'none') { priceContent.style.display = 'block'; priceArrow.innerHTML = '▲'; if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay(); else Hub.emit('priceContent:update', {}); } else { priceContent.style.display = 'none'; priceArrow.innerHTML = '▼'; } };
-            priceSpan.onclick = (e) => { e.stopPropagation(); const current = Hub.get('selectedEuroPrice') || ''; const val = prompt('Введите таможенную стоимость в EUR (оставьте пустым для авто-выбора):', current); if (val !== null && !isNaN(parseFloat(val))) { localStorage.setItem('encar_custom_euro_price', parseFloat(val)); Hub.set('selectedEuroPrice', parseFloat(val)); updatePanel(); } else if (val === '') { localStorage.removeItem('encar_custom_euro_price'); updatePanel(); } };
+            // Клик по стрелке - открывает меню выбора
+            priceArrow.onclick = (e) => {
+                e.stopPropagation();
+                if (priceContent.style.display === 'none') {
+                    priceContent.style.display = 'block';
+                    priceArrow.innerHTML = '▲';
+                    if (unsafeWindow.EncarPrice?.updateDisplay) {
+                        unsafeWindow.EncarPrice.updateDisplay();
+                    } else if (Hub) {
+                        Hub.emit('priceContent:update', {});
+                    }
+                } else {
+                    priceContent.style.display = 'none';
+                    priceArrow.innerHTML = '▼';
+                }
+            };
+            
+            // Клик по цене - ручной ввод
+            priceSpan.onclick = (e) => {
+                e.stopPropagation();
+                const current = Hub.get('selectedEuroPrice') || '';
+                const val = prompt('Введите таможенную стоимость в EUR (оставьте пустым для авто-выбора):', current);
+                if (val !== null && !isNaN(parseFloat(val))) {
+                    const numVal = parseFloat(val);
+                    localStorage.setItem('encar_custom_euro_price', numVal);
+                    Hub.set('selectedEuroPrice', numVal);
+                    updatePanel();
+                } else if (val === '') {
+                    localStorage.removeItem('encar_custom_euro_price');
+                    const autoPrice = Hub.get('selectedEuroPrice');
+                    if (autoPrice) updatePanel();
+                }
+            };
         }
         
+        // ========== КНОПКИ ==========
+        document.getElementById('refresh-panel-btn').onclick = () => { updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); if (unsafeWindow.EncarPrice?.refresh) unsafeWindow.EncarPrice.refresh(); console.log('[UI] Панель обновлена'); };
         document.getElementById('print-report-btn').onclick = () => { if (unsafeWindow.EncarPhotos?.print) unsafeWindow.EncarPhotos.print(); else alert('Модуль фото не загружен'); };
         
         updateDetailedExpenses();
@@ -628,9 +568,31 @@
     }
     
     Hub.on('any:changed', () => updatePanel());
-    Hub.on('priceContent:update', () => { if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay(); });
-    Hub.on('accidentData:loaded', () => updatePanel());
+    Hub.on('accidentData:loaded', (data) => {
+        updatePanel();
+        const accidentContent = document.getElementById('accident-content');
+        if (accidentContent && accidentContent.style.display === 'block') {
+            const detailsDiv = document.getElementById('accident-details');
+            if (detailsDiv && data && data.details && data.details.length) {
+                const usdToKrw = Hub.get('usdToKrw') || 1473;
+                detailsDiv.innerHTML = data.details.map((acc, idx) => {
+                    const part = acc.partCost || 0;
+                    const labor = acc.laborCost || 0;
+                    const paint = acc.paintingCost || 0;
+                    const totalWon = part + labor + paint;
+                    const totalUsd = Math.round(totalWon / usdToKrw);
+                    return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
+                        <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
+                        💰 Выплата: ${totalUsd.toLocaleString()} $<br>
+                        🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
+                        🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
+                        🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
+                    </div>`;
+                }).join('');
+            }
+        }
+    });
     
     createPanel();
-    console.log('[UI] Панель загружена v19.0 (с калькулятором в панели)');
+    console.log('[UI] Панель загружена v18.1');
 })();
