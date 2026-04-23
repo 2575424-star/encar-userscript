@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      22.0
+// @version      24.0
 // @description  Финальная версия панели с калькулятором слева
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -139,22 +139,22 @@
         // Наша цена: цена в USD минус 4%
         const ourPrice = carPriceUSD * 0.96;
         
-        // Сумма: наша цена + расходы Корея + ТПО + расходы Бишкек + утильсбор
-        const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses + (utilizationFee / (currentUsdtRate - 1));
+        // Сумма в USD: наша цена + расходы Корея + ТПО + расходы Бишкек
+        const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses;
         
         // Курс USDT минус 1
         const calcRate = currentUsdtRate - 1;
         
-        // Итог в рублях
-        const totalRUB = totalUSD * calcRate + calcDocsRf;
+        // Итог в рублях: (сумма USD * курс) + утильсбор + документы РФ
+        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
         
         const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
         const ourPriceSpan = calcPanel.querySelector('#calc-our-price');
         const tpoSpan = calcPanel.querySelector('#calc-tpo');
-        const utilSpan = calcPanel.querySelector('#calc-util');
         const totalUSDSpan = calcPanel.querySelector('#calc-total-usd');
         const usdtRateSpan = calcPanel.querySelector('#calc-usdt-rate');
-        const docsSpan = calcPanel.querySelector('#calc-docs');
+        const utilSpan = calcPanel.querySelector('#calc-util');
+        const docsSpan = calcPanel.querySelector('#calc-docs-value');
         const koreaSpan = calcPanel.querySelector('#calc-korea-value');
         const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
         const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
@@ -162,13 +162,15 @@
         if (priceUsdSpan) priceUsdSpan.textContent = `${Math.round(carPriceUSD).toLocaleString()} $`;
         if (ourPriceSpan) ourPriceSpan.textContent = `${Math.round(ourPrice).toLocaleString()} $`;
         if (tpoSpan) tpoSpan.textContent = `${Math.round(currentTpo).toLocaleString()} $`;
-        if (utilSpan) utilSpan.textContent = `${Math.round(utilizationFee).toLocaleString()} ₽`;
         if (totalUSDSpan) totalUSDSpan.textContent = `${Math.round(totalUSD).toLocaleString()} $`;
         if (usdtRateSpan) usdtRateSpan.textContent = `${currentUsdtRate.toFixed(2)} ₽ (x${calcRate.toFixed(2)})`;
+        if (utilSpan) utilSpan.textContent = `${Math.round(utilizationFee).toLocaleString()} ₽`;
         if (docsSpan) docsSpan.textContent = `${Math.round(calcDocsRf).toLocaleString()} ₽`;
         if (koreaSpan) koreaSpan.textContent = `${calcKoreaExpenses.toLocaleString()} $`;
         if (bishkekSpan) bishkekSpan.textContent = `${calcBishkekExpenses.toLocaleString()} $`;
         if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
+        
+        console.log('[Calc] Обновлено:', { carPriceUSD, ourPrice, totalUSD, calcRate, utilizationFee, calcDocsRf, totalRUB });
     }
     
     // Редактирование расходов калькулятора
@@ -451,7 +453,7 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
                             <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Корея:</span>
-                            <span id="calc-korea-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
+                            <span id="calc-korea-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: #94a3b8; font-size: 12px;">🏛️ ТПО:</span>
@@ -459,11 +461,7 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Бишкек:</span>
-                            <span id="calc-bishkek-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">♻️ Утильсбор:</span>
-                            <span id="calc-util" style="color: #fbbf24; font-weight: 600;">—</span>
+                            <span id="calc-bishkek-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
                             <span style="color: #94a3b8; font-size: 12px;">💰 ИТОГО В USD:</span>
@@ -474,8 +472,12 @@
                             <span id="calc-usdt-rate" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">♻️ Утильсбор:</span>
+                            <span id="calc-util" style="color: #fbbf24; font-weight: 600;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: #94a3b8; font-size: 12px;">📄 Документы РФ:</span>
-                            <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
+                            <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid #fbbf24;">
                             <span style="color: #94a3b8; font-size: 14px; font-weight: 700;">💰 ИТОГО В ₽:</span>
@@ -782,5 +784,5 @@
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v22.0 (калькулятор слева, свёрнут)');
+    console.log('[UI] Панель загружена v24.0 (калькулятор слева, свёрнут)');
 })();
