@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      14.0
-// @description  Финальная версия панели (объединённые расходы Киргизии)
+// @version      16.0
+// @description  Финальная версия панели с детальными расходами
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -22,6 +22,103 @@
     let isDragging = false;
     let dragOffsetX = 0, dragOffsetY = 0;
     let isCollapsed = false;
+    
+    // ========== ДЕТАЛЬНЫЕ РАСХОДЫ (СОХРАНЯЕМЫЕ) ==========
+    // Расходы Корея (в вонах)
+    let koreaInspection = 150000;      // Осмотр авто
+    let koreaDealerCommission = 440000; // Комиссия дилера
+    let koreaDelivery = 250000;         // Доставка по Корее (150000-400000)
+    let koreaEvacuator = 50000;         // Эвакуатор в порт Инчхон
+    let koreaExportFeePercent = 0.4;     // Экспортные документы (%)
+    let koreaExportFeeMin = 100000;      // Минимальная сумма
+    let koreaFreight = 5000000;          // Фрахт до Бишкека
+    
+    // Расходы Бишкек (в долларах)
+    let bishkekUnloading = 200;          // Разгрузка + эвакуатор
+    let bishkekBroker = 400;             // СВХ, брокерские услуги
+    let bishkekDelivery = 1200;          // Доставка в РФ
+    
+    // Расходы РФ (в рублях)
+    let rfUnloading = 3000;              // Разгрузка авто
+    let rfPreparation = 3000;            // Подготовка к выдаче
+    let rfDocuments = 85000;             // Оформление документов
+    
+    // ========== ЗАГРУЗКА/СОХРАНЕНИЕ НАСТРОЕК ==========
+    function loadDetailedSettings() {
+        const saved = localStorage.getItem('encar_detailed_settings');
+        if (saved) {
+            try {
+                const settings = JSON.parse(saved);
+                koreaInspection = settings.koreaInspection || 150000;
+                koreaDealerCommission = settings.koreaDealerCommission || 440000;
+                koreaDelivery = settings.koreaDelivery || 250000;
+                koreaEvacuator = settings.koreaEvacuator || 50000;
+                koreaExportFeePercent = settings.koreaExportFeePercent || 0.4;
+                koreaExportFeeMin = settings.koreaExportFeeMin || 100000;
+                koreaFreight = settings.koreaFreight || 5000000;
+                bishkekUnloading = settings.bishkekUnloading || 200;
+                bishkekBroker = settings.bishkekBroker || 400;
+                bishkekDelivery = settings.bishkekDelivery || 1200;
+                rfUnloading = settings.rfUnloading || 3000;
+                rfPreparation = settings.rfPreparation || 3000;
+                rfDocuments = settings.rfDocuments || 85000;
+            } catch(e) {}
+        }
+    }
+    
+    function saveDetailedSettings() {
+        localStorage.setItem('encar_detailed_settings', JSON.stringify({
+            koreaInspection, koreaDealerCommission, koreaDelivery, koreaEvacuator,
+            koreaExportFeePercent, koreaExportFeeMin, koreaFreight,
+            bishkekUnloading, bishkekBroker, bishkekDelivery,
+            rfUnloading, rfPreparation, rfDocuments,
+            timestamp: Date.now()
+        }));
+    }
+    
+    // ========== РАСЧЁТ ИТОГОВЫХ СУММ ==========
+    function calculateTotalKoreaUSD() {
+        const carPriceKrw = Hub.get('carPriceKrw') || 0;
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        
+        // Экспортные документы (0.4% от цены авто, но не менее 100000 вон)
+        let exportFee = (carPriceKrw * koreaExportFeePercent / 100);
+        if (exportFee < koreaExportFeeMin) exportFee = koreaExportFeeMin;
+        
+        const totalKrw = carPriceKrw + koreaInspection + koreaDealerCommission + 
+                         koreaDelivery + koreaEvacuator + exportFee + koreaFreight;
+        return Math.round(totalKrw / usdToKrw);
+    }
+    
+    function calculateTotalBishkekUSD() {
+        return bishkekUnloading + bishkekBroker + bishkekDelivery;
+    }
+    
+    function calculateTotalRFRUB() {
+        return rfUnloading + rfPreparation + rfDocuments;
+    }
+    
+    // Обновление глобальных переменных в Hub
+    function updateGlobalExpenses() {
+        // Расходы Корея в USD (без цены авто, только логистика)
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        let exportFee = (Hub.get('carPriceKrw') || 0) * koreaExportFeePercent / 100;
+        if (exportFee < koreaExportFeeMin) exportFee = koreaExportFeeMin;
+        const koreaLogisticsOnly = Math.round((koreaInspection + koreaDealerCommission + 
+                                                koreaDelivery + koreaEvacuator + exportFee + koreaFreight) / usdToKrw);
+        Hub.set('koreaLogistics', koreaLogisticsOnly);
+        
+        // Расходы Бишкек в USD
+        const bishkekTotal = bishkekUnloading + bishkekBroker + bishkekDelivery;
+        Hub.set('servicesBishkek', bishkekTotal);
+        
+        // Расходы РФ в RUB
+        const rfTotal = rfUnloading + rfPreparation + rfDocuments;
+        Hub.set('docsRf', rfTotal);
+        
+        // Триггерим пересчёт
+        Hub.emit('any:changed', {});
+    }
     
     // ========== СТИЛИ ==========
     GM_addStyle(`
@@ -86,13 +183,42 @@
             transform: scale(1.05);
         }
         
-        .accident-header {
+        .expense-header {
             cursor: pointer;
             transition: all 0.2s ease;
         }
         
-        .accident-header:hover {
+        .expense-header:hover {
             opacity: 0.8;
+        }
+        
+        .expense-content {
+            margin-top: 6px;
+            padding: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            font-size: 11px;
+        }
+        
+        .expense-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            padding: 2px 0;
+        }
+        
+        .expense-label {
+            color: #94a3b8;
+        }
+        
+        .expense-value {
+            color: #fbbf24;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .expense-value:hover {
+            text-decoration: underline;
         }
     `);
     
@@ -121,7 +247,6 @@
     function updatePanel() {
         if (!mainPanel) return;
         
-        // Марка и модель
         const brand = Hub.get('carBrand') || '—';
         const model = Hub.get('carModel') || '—';
         const modelStr = `${brand} ${model}`.trim();
@@ -130,39 +255,32 @@
             if (titleSpan) titleSpan.textContent = modelStr;
         }
         
-        // Просмотры
         const views = Hub.get('carViews');
         const viewsSpan = mainPanel.querySelector('#info-views');
         if (viewsSpan) viewsSpan.textContent = views?.toLocaleString() || '—';
         
-        // Год
         const year = Hub.get('carYear');
         const month = Hub.get('carMonth');
         const yearStr = month ? `${year}/${month}` : (year || '—');
         const yearSpan = mainPanel.querySelector('#info-year');
         if (yearSpan) yearSpan.textContent = yearStr;
         
-        // Двигатель
         const engineVolume = Hub.get('carEngineVolume');
         const engineSpan = mainPanel.querySelector('#info-engine');
         if (engineSpan) engineSpan.textContent = formatVolume(engineVolume);
         
-        // Мощность
         const power = Hub.get('carPowerHp');
         const powerSpan = mainPanel.querySelector('#info-power');
         if (powerSpan) powerSpan.textContent = power ? `${power} л.с.` : '—';
         
-        // Пробег
         const mileage = Hub.get('carMileage');
         const mileageSpan = mainPanel.querySelector('#info-mileage');
         if (mileageSpan) mileageSpan.textContent = formatMileage(mileage);
         
-        // VIN
         const vin = Hub.get('carVin');
         const vinSpan = mainPanel.querySelector('#info-vin');
         if (vinSpan) vinSpan.textContent = formatVin(vin);
         
-        // Страховые выплаты
         const accidentTotal = Hub.get('accidentTotal');
         const accidentSpan = mainPanel.querySelector('#accident-value');
         if (accidentSpan) {
@@ -173,49 +291,29 @@
             }
         }
         
-        // Детали страховых выплат
-        const accidentDetailsData = Hub.get('accidentDetails');
-        const accidentDetailsDiv = mainPanel.querySelector('#accident-details');
-        const usdToKrw = Hub.get('usdToKrw') || 1473;
-        
-        if (accidentDetailsDiv && accidentDetailsData && accidentDetailsData.length) {
-            accidentDetailsDiv.innerHTML = accidentDetailsData.map((acc, idx) => {
-                const part = acc.partCost || 0;
-                const labor = acc.laborCost || 0;
-                const paint = acc.paintingCost || 0;
-                const totalWon = part + labor + paint;
-                const totalUsd = Math.round(totalWon / usdToKrw);
-                return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
-                    <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
-                    💰 Выплата: ${totalUsd.toLocaleString()} $<br>
-                    🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
-                    🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
-                    🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
-                </div>`;
-            }).join('');
-        } else if (accidentDetailsDiv && accidentDetailsData && accidentDetailsData.length === 0) {
-            accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
-        }
-        
-        // Цена в Корее (KRW и USD в одной строке)
+        // Цена в Корее
         const carPriceKrw = Hub.get('carPriceKrw');
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
         const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
         const priceValueSpan = mainPanel.querySelector('#price-value');
         if (priceValueSpan) {
             const krwText = carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—';
             const usdText = priceUsd ? formatNumber(priceUsd) + ' $' : '—';
-            priceValueSpan.innerHTML = `${krwText} / ${usdText}`;
+            priceValueSpan.innerHTML = `${krwText}<br><span style="font-size:13px;">${usdText}</span>`;
         }
         
-        // Расходы Корея/Логистика
-        const koreaLogistics = Hub.get('koreaLogistics') || 5000;
-        const logisticsKoreaSpan = mainPanel.querySelector('#logistics-korea');
-        if (logisticsKoreaSpan) logisticsKoreaSpan.textContent = `${formatNumber(koreaLogistics)} $`;
+        // Итоговые суммы расходов
+        const totalKoreaUSD = calculateTotalKoreaUSD();
+        const totalKoreaSpan = mainPanel.querySelector('#total-korea');
+        if (totalKoreaSpan) totalKoreaSpan.textContent = `${formatNumber(totalKoreaUSD)} $`;
         
-        // Расходы Киргизия/Логистика (объединённые)
-        const kirgizLogistics = 2000;
-        const logisticsKirgizSpan = mainPanel.querySelector('#logistics-kirgiz');
-        if (logisticsKirgizSpan) logisticsKirgizSpan.textContent = `${formatNumber(kirgizLogistics)} $`;
+        const totalBishkekUSD = calculateTotalBishkekUSD();
+        const totalBishkekSpan = mainPanel.querySelector('#total-bishkek');
+        if (totalBishkekSpan) totalBishkekSpan.textContent = `${formatNumber(totalBishkekUSD)} $`;
+        
+        const totalRFRUB = calculateTotalRFRUB();
+        const totalRFSpan = mainPanel.querySelector('#total-rf');
+        if (totalRFSpan) totalRFSpan.textContent = `${formatNumber(totalRFRUB)} ₽`;
         
         // Стоимость авто в EUR
         const euroPrice = Hub.get('selectedEuroPrice');
@@ -230,16 +328,6 @@
         if (tpoSpan) {
             tpoSpan.innerHTML = tpoValue ? `${formatNumber(tpoValue)} $` : '<span style="color:#f97316;">заполните</span>';
         }
-        
-        // Документы РФ
-        const docsRf = Hub.get('docsRf') || 80000;
-        const docsSpan = mainPanel.querySelector('#docs-value');
-        if (docsSpan) docsSpan.textContent = `${formatNumber(docsRf)} ₽`;
-        
-        // Наши услуги
-        const ourServices = Hub.get('ourServices') || 250000;
-        const ourSpan = mainPanel.querySelector('#our-value');
-        if (ourSpan) ourSpan.textContent = `${formatNumber(ourServices)} ₽`;
         
         // Утильсбор
         const utilizationFee = Hub.get('utilizationFee');
@@ -274,45 +362,138 @@
         if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
     }
     
-    // ========== ФУНКЦИЯ ОБНОВЛЕНИЯ СТРАХОВЫХ ВЫПЛАТ ==========
-    function updateAccidentPanel(accidentInfo) {
-        const accidentSpan = document.getElementById('accident-value');
-        const accidentDetailsDiv = document.getElementById('accident-details');
-        const usdToKrw = Hub.get('usdToKrw') || 1473;
+    // ========== ОБНОВЛЕНИЕ ДЕТАЛЬНЫХ РАСХОДОВ ==========
+    function updateDetailedExpenses() {
+        const koreaDetailsDiv = document.getElementById('korea-details-inner');
+        const bishkekDetailsDiv = document.getElementById('bishkek-details-inner');
+        const rfDetailsDiv = document.getElementById('rf-details-inner');
         
-        if (accidentSpan) {
-            if (!accidentInfo || accidentInfo.count === undefined) {
-                accidentSpan.innerHTML = '<span style="color:#f97316;">загрузка...</span>';
-            } else if (accidentInfo.count === 0) {
-                accidentSpan.innerHTML = 'Без ДТП';
-            } else {
-                accidentSpan.innerHTML = `${accidentInfo.totalUsd?.toLocaleString() || '0'} $`;
-            }
+        const usdToKrw = Hub.get('usdToKrw') || 1473;
+        const carPriceKrw = Hub.get('carPriceKrw') || 0;
+        let exportFee = carPriceKrw * koreaExportFeePercent / 100;
+        if (exportFee < koreaExportFeeMin) exportFee = koreaExportFeeMin;
+        
+        if (koreaDetailsDiv) {
+            koreaDetailsDiv.innerHTML = `
+                <div class="expense-row"><span class="expense-label">🔍 Осмотр авто:</span><span class="expense-value" data-expense="koreaInspection">${formatNumber(koreaInspection)} ₩ (${Math.round(koreaInspection/usdToKrw)} $)</span></div>
+                <div class="expense-row"><span class="expense-label">💰 Комиссия дилера:</span><span class="expense-value" data-expense="koreaDealerCommission">${formatNumber(koreaDealerCommission)} ₩ (${Math.round(koreaDealerCommission/usdToKrw)} $)</span></div>
+                <div class="expense-row"><span class="expense-label">🚚 Доставка по Корее:</span><span class="expense-value" data-expense="koreaDelivery">${formatNumber(koreaDelivery)} ₩ (${Math.round(koreaDelivery/usdToKrw)} $)</span></div>
+                <div class="expense-row"><span class="expense-label">🔄 Эвакуатор в порт Инчхон:</span><span class="expense-value" data-expense="koreaEvacuator">${formatNumber(koreaEvacuator)} ₩ (${Math.round(koreaEvacuator/usdToKrw)} $)</span></div>
+                <div class="expense-row"><span class="expense-label">📄 Экспортные документы:</span><span class="expense-value" data-expense="koreaExportFee">${koreaExportFeePercent}% (мин ${formatNumber(koreaExportFeeMin)} ₩) = ${formatNumber(exportFee)} ₩ (${Math.round(exportFee/usdToKrw)} $)</span></div>
+                <div class="expense-row"><span class="expense-label">🚢 Фрахт до Бишкека:</span><span class="expense-value" data-expense="koreaFreight">${formatNumber(koreaFreight)} ₩ (${Math.round(koreaFreight/usdToKrw)} $)</span></div>
+                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО КОРЕЯ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(calculateTotalKoreaUSD())} $</span></div>
+            `;
         }
         
-        if (accidentDetailsDiv && accidentInfo && accidentInfo.details && accidentInfo.details.length > 0) {
-            accidentDetailsDiv.innerHTML = accidentInfo.details.map((acc, idx) => {
-                const part = acc.partCost || 0;
-                const labor = acc.laborCost || 0;
-                const paint = acc.paintingCost || 0;
-                const totalWon = part + labor + paint;
-                const totalUsd = Math.round(totalWon / usdToKrw);
-                return `<div style="margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #334155;">
-                    <b>Случай ${idx+1}</b> ${acc.date ? `(${acc.date})` : ''}<br>
-                    💰 Выплата: ${totalUsd.toLocaleString()} $<br>
-                    🔧 Запчасти: ${Math.round(part/usdToKrw).toLocaleString()} $<br>
-                    🛠️ Работа: ${Math.round(labor/usdToKrw).toLocaleString()} $<br>
-                    🎨 Покраска: ${Math.round(paint/usdToKrw).toLocaleString()} $
-                </div>`;
-            }).join('');
-        } else if (accidentDetailsDiv && accidentInfo && accidentInfo.count === 0) {
-            accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
+        if (bishkekDetailsDiv) {
+            bishkekDetailsDiv.innerHTML = `
+                <div class="expense-row"><span class="expense-label">📦 Разгрузка + эвакуатор:</span><span class="expense-value" data-expense="bishkekUnloading">${formatNumber(bishkekUnloading)} $</span></div>
+                <div class="expense-row"><span class="expense-label">📋 СВХ + брокерские услуги:</span><span class="expense-value" data-expense="bishkekBroker">${formatNumber(bishkekBroker)} $</span></div>
+                <div class="expense-row"><span class="expense-label">🚚 Доставка в РФ:</span><span class="expense-value" data-expense="bishkekDelivery">${formatNumber(bishkekDelivery)} $</span></div>
+                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО БИШКЕК:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(calculateTotalBishkekUSD())} $</span></div>
+            `;
+        }
+        
+        if (rfDetailsDiv) {
+            rfDetailsDiv.innerHTML = `
+                <div class="expense-row"><span class="expense-label">🔄 Разгрузка авто:</span><span class="expense-value" data-expense="rfUnloading">${formatNumber(rfUnloading)} ₽</span></div>
+                <div class="expense-row"><span class="expense-label">🔧 Подготовка к выдаче:</span><span class="expense-value" data-expense="rfPreparation">${formatNumber(rfPreparation)} ₽</span></div>
+                <div class="expense-row"><span class="expense-label">📄 Оформление документов:</span><span class="expense-value" data-expense="rfDocuments">${formatNumber(rfDocuments)} ₽</span></div>
+                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО РФ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(calculateTotalRFRUB())} ₽</span></div>
+            `;
+        }
+        
+        // Добавляем обработчики для редактирования
+        document.querySelectorAll('[data-expense]').forEach(el => {
+            const expenseName = el.getAttribute('data-expense');
+            el.onclick = () => editExpense(expenseName);
+        });
+    }
+    
+    function editExpense(expenseName) {
+        let currentValue, promptText, isWon = false;
+        
+        switch(expenseName) {
+            case 'koreaInspection':
+                currentValue = koreaInspection;
+                promptText = 'Осмотр авто (вон):';
+                isWon = true;
+                break;
+            case 'koreaDealerCommission':
+                currentValue = koreaDealerCommission;
+                promptText = 'Комиссия дилера (вон):';
+                isWon = true;
+                break;
+            case 'koreaDelivery':
+                currentValue = koreaDelivery;
+                promptText = 'Доставка по Корее (вон):';
+                isWon = true;
+                break;
+            case 'koreaEvacuator':
+                currentValue = koreaEvacuator;
+                promptText = 'Эвакуатор в порт (вон):';
+                isWon = true;
+                break;
+            case 'koreaFreight':
+                currentValue = koreaFreight;
+                promptText = 'Фрахт до Бишкека (вон):';
+                isWon = true;
+                break;
+            case 'bishkekUnloading':
+                currentValue = bishkekUnloading;
+                promptText = 'Разгрузка + эвакуатор ($):';
+                break;
+            case 'bishkekBroker':
+                currentValue = bishkekBroker;
+                promptText = 'СВХ + брокерские услуги ($):';
+                break;
+            case 'bishkekDelivery':
+                currentValue = bishkekDelivery;
+                promptText = 'Доставка в РФ ($):';
+                break;
+            case 'rfUnloading':
+                currentValue = rfUnloading;
+                promptText = 'Разгрузка авто (₽):';
+                break;
+            case 'rfPreparation':
+                currentValue = rfPreparation;
+                promptText = 'Подготовка к выдаче (₽):';
+                break;
+            case 'rfDocuments':
+                currentValue = rfDocuments;
+                promptText = 'Оформление документов (₽):';
+                break;
+            default: return;
+        }
+        
+        const newValue = prompt(promptText, currentValue);
+        if (newValue !== null && !isNaN(parseFloat(newValue))) {
+            const numValue = parseFloat(newValue);
+            switch(expenseName) {
+                case 'koreaInspection': koreaInspection = numValue; break;
+                case 'koreaDealerCommission': koreaDealerCommission = numValue; break;
+                case 'koreaDelivery': koreaDelivery = numValue; break;
+                case 'koreaEvacuator': koreaEvacuator = numValue; break;
+                case 'koreaFreight': koreaFreight = numValue; break;
+                case 'bishkekUnloading': bishkekUnloading = numValue; break;
+                case 'bishkekBroker': bishkekBroker = numValue; break;
+                case 'bishkekDelivery': bishkekDelivery = numValue; break;
+                case 'rfUnloading': rfUnloading = numValue; break;
+                case 'rfPreparation': rfPreparation = numValue; break;
+                case 'rfDocuments': rfDocuments = numValue; break;
+            }
+            saveDetailedSettings();
+            updateDetailedExpenses();
+            updateGlobalExpenses();
+            updatePanel();
         }
     }
     
     // ========== СОЗДАНИЕ ПАНЕЛИ ==========
     function createPanel() {
         if (mainPanel) return;
+        
+        loadDetailedSettings();
         
         mainPanel = document.createElement('div');
         mainPanel.className = 'encar-panel';
@@ -330,7 +511,7 @@
             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
             border: 1px solid rgba(255,255,255,0.1) !important;
             font-size: 13px !important;
-            width: 360px !important;
+            width: 380px !important;
             backdrop-filter: blur(8px) !important;
             cursor: move;
             user-select: none;
@@ -384,44 +565,59 @@
                     </div>
                 </div>
                 
-                <!-- Страховые выплаты (раскрывающийся блок) -->
+                <!-- Страховые выплаты -->
                 <div style="margin-bottom: 10px;">
-                    <div id="accident-header" class="accident-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 6px 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 6px 10px;">
                         <span style="color: #94a3b8; font-size: 14px; font-weight: 500;">💸 Страховые выплаты:</span>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <span id="accident-value" style="color: #fbbf24; font-weight: 600; font-size: 14px;">загрузка...</span>
-                            <span id="accident-arrow" style="font-size: 12px; color: #94a3b8;">▼</span>
-                        </div>
-                    </div>
-                    <div id="accident-content" style="display: none; margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 8px;">
-                        <div id="accident-details" style="font-size: 12px; color: #cbd5e1; max-height: 200px; overflow-y: auto;">
-                            Загрузка...
-                        </div>
+                        <span id="accident-value" style="color: #fbbf24; font-weight: 600; font-size: 14px;">загрузка...</span>
                     </div>
                 </div>
                 
-                <!-- Цена в Корее (одна строка) -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 6px;">
-                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена в Корее</div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 15px; font-weight: 600;">🇰🇷 KRW / 🇺🇸 USD:</span>
-                        <span id="price-value" style="color: #fbbf24; font-weight: 700; font-size: 16px;">—</span>
-                    </div>
-                </div>
-                
-                <!-- Расходы Корея/Логистика -->
-                <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 6px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 14px; font-weight: 500;">📦 Расходы Корея/Логистика:</span>
-                        <span id="logistics-korea" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">5000 $</span>
-                    </div>
-                </div>
-                
-                <!-- Расходы Киргизия/Логистика -->
+                <!-- Цена в Корее -->
                 <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size: 14px; font-weight: 500;">🏛️ Расходы Киргизия/Логистика:</span>
-                        <span id="logistics-kirgiz" class="clickable" style="font-weight: 700; font-size: 16px; color: #fbbf24;">2000 $</span>
+                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">💰 Цена в Корее</div>
+                    <div id="price-value" style="color: #fbbf24; font-weight: 700; font-size: 16px; text-align: center;">—</div>
+                </div>
+                
+                <!-- Расходы Корея (раскрывающийся) -->
+                <div style="margin-bottom: 8px;">
+                    <div id="korea-header" class="expense-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 10px;">
+                        <span style="font-size: 14px; font-weight: 500;">🇰🇷 Расходы Корея</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="total-korea" style="color: #fbbf24; font-weight: 700; font-size: 15px;">—</span>
+                            <span id="korea-arrow" style="font-size: 12px; color: #94a3b8;">▼</span>
+                        </div>
+                    </div>
+                    <div id="korea-content" style="display: none; margin-top: 6px;">
+                        <div id="korea-details-inner" class="expense-content"></div>
+                    </div>
+                </div>
+                
+                <!-- Расходы Бишкек (раскрывающийся) -->
+                <div style="margin-bottom: 8px;">
+                    <div id="bishkek-header" class="expense-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 10px;">
+                        <span style="font-size: 14px; font-weight: 500;">🇰🇬 Расходы Бишкек</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="total-bishkek" style="color: #fbbf24; font-weight: 700; font-size: 15px;">—</span>
+                            <span id="bishkek-arrow" style="font-size: 12px; color: #94a3b8;">▼</span>
+                        </div>
+                    </div>
+                    <div id="bishkek-content" style="display: none; margin-top: 6px;">
+                        <div id="bishkek-details-inner" class="expense-content"></div>
+                    </div>
+                </div>
+                
+                <!-- Расходы РФ (раскрывающийся) -->
+                <div style="margin-bottom: 8px;">
+                    <div id="rf-header" class="expense-header" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 10px;">
+                        <span style="font-size: 14px; font-weight: 500;">🇷🇺 Расходы РФ</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="total-rf" style="color: #fbbf24; font-weight: 700; font-size: 15px;">—</span>
+                            <span id="rf-arrow" style="font-size: 12px; color: #94a3b8;">▼</span>
+                        </div>
+                    </div>
+                    <div id="rf-content" style="display: none; margin-top: 6px;">
+                        <div id="rf-details-inner" class="expense-content"></div>
                     </div>
                 </div>
                 
@@ -438,23 +634,14 @@
                     <div id="price-content" style="display: none; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08);">
                         <div id="price-content-inner" style="font-size: 11px;">Загрузка...</div>
                     </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <div style="display: flex; justify-content: space-between;">
                         <span style="font-size: 14px; font-weight: 500;">🏛️ ТПО:</span>
                         <span id="tpo-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
                     </div>
                 </div>
                 
-                <!-- Расходы в РФ -->
+                <!-- Расходы в РФ (утильсбор) -->
                 <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 8px; margin-bottom: 8px;">
-                    <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; font-weight: 500;">📋 Расходы в РФ</div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 14px; font-weight: 500;">📄 Документы РФ:</span>
-                        <span id="docs-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span style="font-size: 14px; font-weight: 500;">🤝 Наши услуги:</span>
-                        <span id="our-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
-                    </div>
                     <div style="display: flex; justify-content: space-between;">
                         <span style="font-size: 14px; font-weight: 500;">♻️ Утильсбор:</span>
                         <span id="util-value" class="clickable" style="font-weight: 700; font-size: 15px;">—</span>
@@ -524,6 +711,55 @@
             }
         });
         
+        // ========== РАСКРЫВАЮЩИЕСЯ БЛОКИ ==========
+        const koreaHeader = document.getElementById('korea-header');
+        const koreaContent = document.getElementById('korea-content');
+        const koreaArrow = document.getElementById('korea-arrow');
+        if (koreaHeader && koreaContent && koreaArrow) {
+            koreaHeader.onclick = () => {
+                if (koreaContent.style.display === 'none') {
+                    koreaContent.style.display = 'block';
+                    koreaArrow.innerHTML = '▲';
+                    updateDetailedExpenses();
+                } else {
+                    koreaContent.style.display = 'none';
+                    koreaArrow.innerHTML = '▼';
+                }
+            };
+        }
+        
+        const bishkekHeader = document.getElementById('bishkek-header');
+        const bishkekContent = document.getElementById('bishkek-content');
+        const bishkekArrow = document.getElementById('bishkek-arrow');
+        if (bishkekHeader && bishkekContent && bishkekArrow) {
+            bishkekHeader.onclick = () => {
+                if (bishkekContent.style.display === 'none') {
+                    bishkekContent.style.display = 'block';
+                    bishkekArrow.innerHTML = '▲';
+                    updateDetailedExpenses();
+                } else {
+                    bishkekContent.style.display = 'none';
+                    bishkekArrow.innerHTML = '▼';
+                }
+            };
+        }
+        
+        const rfHeader = document.getElementById('rf-header');
+        const rfContent = document.getElementById('rf-content');
+        const rfArrow = document.getElementById('rf-arrow');
+        if (rfHeader && rfContent && rfArrow) {
+            rfHeader.onclick = () => {
+                if (rfContent.style.display === 'none') {
+                    rfContent.style.display = 'block';
+                    rfArrow.innerHTML = '▲';
+                    updateDetailedExpenses();
+                } else {
+                    rfContent.style.display = 'none';
+                    rfArrow.innerHTML = '▼';
+                }
+            };
+        }
+        
         // ========== СВОРАЧИВАНИЕ ==========
         const collapseBtn = document.getElementById('collapse-btn');
         const fullContent = document.getElementById('panel-full-content');
@@ -535,7 +771,7 @@
                 if (isCollapsed) {
                     fullContent.style.display = 'block';
                     collapsedContent.style.display = 'none';
-                    mainPanel.style.width = '360px';
+                    mainPanel.style.width = '380px';
                     mainPanel.style.padding = '12px 16px';
                     collapseBtn.innerHTML = '−';
                     isCollapsed = false;
@@ -552,23 +788,6 @@
         
         // ========== ОБРАБОТЧИКИ КЛИКОВ ==========
         
-        // Раскрывающийся блок страховых выплат
-        const accidentHeader = document.getElementById('accident-header');
-        const accidentContent = document.getElementById('accident-content');
-        const accidentArrow = document.getElementById('accident-arrow');
-        
-        if (accidentHeader && accidentContent && accidentArrow) {
-            accidentHeader.addEventListener('click', () => {
-                if (accidentContent.style.display === 'none') {
-                    accidentContent.style.display = 'block';
-                    accidentArrow.innerHTML = '▲';
-                } else {
-                    accidentContent.style.display = 'none';
-                    accidentArrow.innerHTML = '▼';
-                }
-            });
-        }
-        
         // Курсы валют
         document.getElementById('usd-header').onclick = () => {
             const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5);
@@ -581,6 +800,9 @@
         document.getElementById('krw-header').onclick = () => {
             const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473);
             if (val && !isNaN(parseFloat(val))) Hub.set('usdToKrw', parseFloat(val));
+            updateDetailedExpenses();
+            updateGlobalExpenses();
+            updatePanel();
         };
         document.getElementById('usdt-header').onclick = () => {
             const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90);
@@ -601,34 +823,6 @@
                 span.textContent = '✅ Скопировано!';
                 setTimeout(() => span.textContent = orig, 1500);
             }
-        };
-        
-        // Расходы Корея/Логистика
-        document.getElementById('logistics-korea').onclick = () => {
-            const val = prompt('Расходы Корея/Логистика ($):', Hub.get('koreaLogistics') || 5000);
-            if (val && !isNaN(parseFloat(val))) Hub.set('koreaLogistics', parseFloat(val));
-        };
-        
-        // Расходы Киргизия/Логистика
-        document.getElementById('logistics-kirgiz').onclick = () => {
-            const val = prompt('Расходы Киргизия/Логистика ($):', 2000);
-            if (val && !isNaN(parseFloat(val))) {
-                const newVal = parseFloat(val);
-                document.getElementById('logistics-kirgiz').textContent = `${newVal.toLocaleString()} $`;
-                Hub.set('kirgizLogistics', newVal);
-            }
-        };
-        
-        // Документы РФ
-        document.getElementById('docs-value').onclick = () => {
-            const val = prompt('Документы РФ (₽):', Hub.get('docsRf') || 80000);
-            if (val && !isNaN(parseFloat(val))) Hub.set('docsRf', parseFloat(val));
-        };
-        
-        // Наши услуги
-        document.getElementById('our-value').onclick = () => {
-            const val = prompt('Наши услуги (₽):', Hub.get('ourServices') || 250000);
-            if (val && !isNaN(parseFloat(val))) Hub.set('ourServices', parseFloat(val));
         };
         
         // ТПО
@@ -672,6 +866,8 @@
         
         // Кнопка обновления
         document.getElementById('refresh-panel-btn').onclick = () => {
+            updateDetailedExpenses();
+            updateGlobalExpenses();
             updatePanel();
             if (unsafeWindow.EncarPrice?.refresh) unsafeWindow.EncarPrice.refresh();
             console.log('[UI] Панель обновлена');
@@ -686,9 +882,11 @@
             }
         };
         
+        updateDetailedExpenses();
+        updateGlobalExpenses();
         updatePanel();
         
-        // Периодическое обновление панели
+        // Периодическое обновление
         setInterval(() => updatePanel(), 5000);
     }
     
@@ -699,14 +897,10 @@
             unsafeWindow.EncarPrice.updateDisplay();
         }
     });
-    
-    Hub.on('accidentData:loaded', (data) => {
-        updateAccidentPanel(data);
-        updatePanel();
-    });
+    Hub.on('accidentData:loaded', () => updatePanel());
     
     // ========== ЗАПУСК ==========
     createPanel();
     
-    console.log('[UI] Финальная панель v14.0 загружена');
+    console.log('[UI] Панель с детальными расходами загружена v16.0');
 })();
