@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Car Data Module FIXED
 // @namespace    http://tampermonkey.net/
-// @version      3.1
-// @description  Улучшенный сбор данных с Encar + страховые выплаты + перевод моделей
+// @version      3.2
+// @description  Улучшенный сбор данных с Encar + страховые выплаты + принудительный перевод моделей
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -42,63 +42,107 @@
         return koreanBrand.toUpperCase();
     }
 
-    // ========== ПЕРЕВОД МОДЕЛЕЙ (ДОБАВЛЕНО) ==========
+    // ========== ПЕРЕВОД МОДЕЛЕЙ (РАСШИРЕННЫЙ) ==========
     const MODEL_TRANSLATIONS = {
-        // Mercedes-Benz
-        'E클래스': 'E-Class', 'E-лайз': 'E-Class', '이클래스': 'E-Class',
-        'S클래스': 'S-Class', 's클래스': 'S-Class',
-        'C클래스': 'C-Class', 'c클래스': 'C-Class',
-        'GLE': 'GLE', 'GLS': 'GLS', 'G-Class': 'G-Class', 'G클래스': 'G-Class',
-        'CLS': 'CLS', 'CLA': 'CLA', 'AMG': 'AMG',
         // BMW
-        'X5': 'X5', 'X6': 'X6', 'X3': 'X3', 'X7': 'X7',
-        '5시리즈': '5 Series', '5 Series': '5 Series',
-        '7시리즈': '7 Series', '7 Series': '7 Series',
-        '3시리즈': '3 Series', '3 Series': '3 Series',
-        // Hyundai
-        '싼타페': 'SANTA FE', 'SANTA FE': 'SANTA FE',
-        '투싼': 'TUCSON', 'TUCSON': 'TUCSON',
-        '아반떼': 'AVANTE', 'AVANTE': 'AVANTE',
-        '그랜저': 'GRANDEUR', 'GRANDEUR': 'GRANDEUR',
-        // Kia
-        '쏘렌토': 'SORENTO', 'SORENTO': 'SORENTO',
-        '카니발': 'CARNIVAL', 'CARNIVAL': 'CARNIVAL',
-        '스포티지': 'SPORTAGE', 'SPORTAGE': 'SPORTAGE',
-        '셀토스': 'SELTOS', 'SELTOS': 'SELTOS',
+        '1시리즈': '1 Series', '2시리즈': '2 Series', '3시리즈': '3 Series',
+        '4시리즈': '4 Series', '5시리즈': '5 Series', '6시리즈': '6 Series',
+        '7시리즈': '7 Series', '8시리즈': '8 Series',
+        '그란투리스모': 'Gran Turismo', 'GT': 'GT',
+        'M2': 'M2', 'M3': 'M3', 'M4': 'M4', 'M5': 'M5', 'M6': 'M6', 'M8': 'M8',
+        'X1': 'X1', 'X2': 'X2', 'X3': 'X3', 'X4': 'X4', 'X5': 'X5', 'X6': 'X6', 'X7': 'X7',
+        'X3M': 'X3 M', 'X4M': 'X4 M', 'X5M': 'X5 M', 'X6M': 'X6 M', 'XM': 'XM',
+        'Z3': 'Z3', 'Z4': 'Z4', 'Z8': 'Z8',
+        'i3': 'i3', 'i4': 'i4', 'i5': 'i5', 'i7': 'i7', 'i8': 'i8',
+        'iX1': 'iX1', 'iX2': 'iX2', 'iX3': 'iX3', 'iX': 'iX',
+        
+        // Mercedes-Benz
+        'A-클래스': 'A-Class', 'A클래스': 'A-Class', 'A-лайз': 'A-Class',
+        'B-클래스': 'B-Class', 'B클래스': 'B-Class',
+        'C-클래스': 'C-Class', 'C클래스': 'C-Class', 'C-лайз': 'C-Class',
+        'CLA-클래스': 'CLA-Class', 'CLA클래스': 'CLA-Class',
+        'CLE-클래스': 'CLE-Class', 'CLE클래스': 'CLE-Class',
+        'CLS-클래스': 'CLS-Class', 'CLS클래스': 'CLS-Class',
+        'E-클래스': 'E-Class', 'E클래스': 'E-Class', 'E-лайз': 'E-Class', 'E-лайт': 'E-Class',
+        'EQA': 'EQA', 'EQB': 'EQB', 'EQC': 'EQC', 'EQE': 'EQE', 'EQS': 'EQS',
+        'G-클래스': 'G-Class', 'G클래스': 'G-Class', 'G-лайз': 'G-Class',
+        'GLA-클래스': 'GLA-Class', 'GLA클래스': 'GLA-Class',
+        'GLB-클래스': 'GLB-Class', 'GLB클래스': 'GLB-Class',
+        'GLC-클래스': 'GLC-Class', 'GLC클래스': 'GLC-Class',
+        'GLE-클래스': 'GLE-Class', 'GLE클래스': 'GLE-Class',
+        'GLS-클래스': 'GLS-Class', 'GLS클래스': 'GLS-Class',
+        'S-클래스': 'S-Class', 'S클래스': 'S-Class', 'S-лайз': 'S-Class',
+        'SL-클래스': 'SL-Class', 'SL클래스': 'SL-Class',
+        'SLC-클래스': 'SLC-Class', 'SLK-클래스': 'SLK-Class',
+        'AMG GT': 'AMG GT', 'SLS AMG': 'SLS AMG',
+        'V-클래스': 'V-Class', 'V클래스': 'V-Class',
+        '스프린터': 'Sprinter',
+        
+        // Land Rover
+        '디스커버리 스포츠': 'Discovery Sport',
+        '디스커버리': 'Discovery',
+        '디펜더': 'Defender',
+        '레인지로버 벨라': 'Range Rover Velar',
+        '레인지로버 스포츠': 'Range Rover Sport',
+        '레인지로버 이보크': 'Range Rover Evoque',
+        '레인지로버': 'Range Rover',
+        '프리랜더': 'Freelander',
+        '벨라': 'Velar', '이보크': 'Evoque',
+        
         // Audi
         'A4': 'A4', 'A6': 'A6', 'A8': 'A8', 'Q5': 'Q5', 'Q7': 'Q7', 'Q8': 'Q8',
+        
+        // Porsche
+        '카이엔': 'Cayenne', '마칸': 'Macan', '파나메라': 'Panamera', '911': '911',
+        
+        // Tesla
+        '모델 S': 'Model S', '모델 X': 'Model X', '모델 Y': 'Model Y', '모델 3': 'Model 3',
+        
+        // Lexus
+        'ES': 'ES', 'NX': 'NX', 'RX': 'RX', 'LX': 'LX', 'UX': 'UX',
     };
 
     function translateModel(koreanModel) {
         if (!koreanModel) return null;
         
-        // Проверяем по словарю
+        // Прямое совпадение (без учёта регистра)
+        const lowerModel = koreanModel.toLowerCase();
         for (const [kr, en] of Object.entries(MODEL_TRANSLATIONS)) {
-            if (koreanModel.toLowerCase().includes(kr.toLowerCase())) {
-                console.log(`[CarData] Перевод модели: ${koreanModel} -> ${en}`);
+            if (lowerModel === kr.toLowerCase()) {
+                console.log(`[CarData] Перевод модели (точное): ${koreanModel} -> ${en}`);
                 return en;
             }
         }
         
-        // Удаляем корейские суффиксы и лишние символы
+        // Частичное совпадение
+        for (const [kr, en] of Object.entries(MODEL_TRANSLATIONS)) {
+            if (lowerModel.includes(kr.toLowerCase())) {
+                console.log(`[CarData] Перевод модели (частичный): ${koreanModel} -> ${en}`);
+                return en;
+            }
+        }
+        
+        // Удаляем корейские символы и скобки
         let cleaned = koreanModel
-            .replace(/\s*\([^)]*\)\s*/g, ' ')
-            .replace(/년형|년식?/g, '')
-            .replace(/[가-힣]+$/g, '')
-            .replace(/G[0-9]+|F[0-9]+/g, '')
+            .replace(/[가-힣]/g, '')
+            .replace(/\([^)]*\)/g, '')
+            .replace(/\s+/g, ' ')
             .trim();
         
-        if (/^[A-Za-z0-9\s-]+$/.test(cleaned) && cleaned.length > 0) {
+        if (cleaned && /^[A-Za-z0-9\s-]+$/.test(cleaned)) {
+            console.log(`[CarData] Перевод модели (очистка): ${koreanModel} -> ${cleaned}`);
             return cleaned;
         }
         
-        return cleaned || koreanModel;
+        console.log(`[CarData] Модель не переведена: ${koreanModel}`);
+        return koreanModel;
     }
 
-    // ========== МАРКА И МОДЕЛЬ (С ПЕРЕВОДОМ) ==========
+    // ========== МАРКА И МОДЕЛЬ (С ПРИНУДИТЕЛЬНЫМ ПЕРЕВОДОМ) ==========
     function getCarBrandAndModel() {
         let brand = null, model = null;
 
+        // Способ 1: из PRELOADED_STATE
         if (window.__PRELOADED_STATE__) {
             try {
                 const cat = window.__PRELOADED_STATE__.cars?.base?.category ||
@@ -109,13 +153,14 @@
                     if (brand && model) {
                         if (brand && !/^[A-Z]+$/.test(brand)) brand = translateBrand(brand);
                         if (model) model = translateModel(model);
-                        console.log(`[CarData] Способ 1: ${brand} ${model}`);
+                        console.log(`[CarData] Способ 1 (PRELOADED): ${brand} ${model}`);
                         return { brand, model };
                     }
                 }
             } catch(e) {}
         }
 
+        // Способ 2: из скриптов
         const scripts = document.querySelectorAll('script');
         for (const s of scripts) {
             const txt = s.textContent;
@@ -130,25 +175,31 @@
             if (brand && model) break;
         }
 
+        // Способ 3: из заголовка страницы
         if (!brand || !model) {
             const title = document.title;
             const match = title.match(/^([A-Z]+)\s+([^(]+)/);
             if (match) {
-                brand = match[1];
-                model = match[2].trim();
+                brand = brand || match[1];
+                model = model || match[2].trim();
             }
         }
 
+        // Принудительный перевод
         if (brand && !/^[A-Z]+$/.test(brand)) brand = translateBrand(brand);
         if (model) {
-            model = translateModel(model);
+            const translatedModel = translateModel(model);
+            if (translatedModel) model = translatedModel;
+            // Дополнительная очистка
             model = model.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+            model = model.replace(/년형|년식?/g, '').trim();
         }
 
+        console.log(`[CarData] Финальные данные: brand=${brand}, model=${model}`);
         return (brand || model) ? { brand, model } : null;
     }
 
-    // ========== ГОД И МЕСЯЦ ==========
+    // ========== ОСТАЛЬНЫЕ ФУНКЦИИ (БЕЗ ИЗМЕНЕНИЙ) ==========
     function getCarYearMonth() {
         let year = null, month = null;
 
@@ -208,7 +259,6 @@
         return year ? { year, month } : null;
     }
 
-    // ========== VIN НОМЕР ==========
     function getVinNumber() {
         let vin = null;
 
@@ -258,7 +308,6 @@
         return null;
     }
 
-    // ========== ПРОБЕГ ==========
     function getCarMileage() {
         if (window.__PRELOADED_STATE__) {
             try {
@@ -281,7 +330,6 @@
         return null;
     }
 
-    // ========== ОБЪЁМ ДВИГАТЕЛЯ ==========
     function getEngineVolume() {
         let volume = null;
 
@@ -344,7 +392,6 @@
         return null;
     }
 
-    // ========== МОЩНОСТЬ ==========
     function getCarPower() {
         function kwToHp(kw) { return Math.round(kw * 1.341); }
 
@@ -384,7 +431,6 @@
         return null;
     }
 
-    // ========== ЦЕНА В KRW ==========
     function getCarPriceKrw() {
         if (window.__PRELOADED_STATE__) {
             try {
@@ -412,7 +458,6 @@
         return null;
     }
 
-    // ========== ID АВТО ==========
     function getCarId() {
         const urlMatch = window.location.href.match(/carid=(\d+)/);
         if (urlMatch) return urlMatch[1];
@@ -422,7 +467,6 @@
         return null;
     }
 
-    // ========== ПРОСМОТРЫ ==========
     function getCarViews() {
         if (window.__PRELOADED_STATE__) {
             try {
@@ -628,5 +672,5 @@
     loadSavedPower();
     setTimeout(() => collectAllCarData(), 500);
 
-    console.log('[CarData] Модуль загружен v3.1 (с переводом моделей)');
+    console.log('[CarData] Модуль загружен v3.2 (принудительный перевод моделей)');
 })();
