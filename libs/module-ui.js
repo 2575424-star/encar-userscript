@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      25.0
+// @version      27.0
 // @description  Финальная версия панели с калькулятором слева
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -27,11 +27,10 @@
     let calcDragOffsetX = 0, calcDragOffsetY = 0;
     
     // ========== РЕДАКТИРУЕМЫЕ РАСХОДЫ ДЛЯ КАЛЬКУЛЯТОРА ==========
-    let calcKoreaExpenses = 4000;   // Расходы Корея
-    let calcBishkekExpenses = 1600; // Расходы Бишкек
-    let calcDocsRf = 85000;         // Документы РФ
+    let calcKoreaExpenses = 4000;
+    let calcBishkekExpenses = 1600;
+    let calcDocsRf = 85000;
     
-    // Загрузка сохранённых расходов
     function loadCalcExpenses() {
         const saved = localStorage.getItem('encar_calc_expenses');
         if (saved) {
@@ -69,7 +68,6 @@
     let rfPreparation = 3000;
     let rfDocuments = 85000;
     
-    // ========== ЗАГРУЗКА/СОХРАНЕНИЕ ==========
     function loadDetailedSettings() {
         const saved = localStorage.getItem('encar_detailed_settings');
         if (saved) {
@@ -127,7 +125,6 @@
         updateCalcPanel();
     }
     
-    // ========== КАЛЬКУЛЯТОР ==========
     function updateCalcPanel() {
         if (!calcPanel) return;
         
@@ -137,19 +134,10 @@
         const utilizationFee = Hub.get('utilizationFee') || 0;
         const mainTotal = Hub.get('totalPrice') || 0;
         
-        // Наша цена: цена в USD минус 4%
         const ourPrice = carPriceUSD * 0.96;
-        
-        // Сумма в USD: наша цена + расходы Корея + ТПО + расходы Бишкек
         const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses;
-        
-        // Курс USDT минус 1
         const calcRate = currentUsdtRate - 1;
-        
-        // Итог в рублях: (сумма USD * курс) + утильсбор + документы РФ
         const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
-        
-        // Наценка = Итого из основного приложения - Результат калькулятора
         const markup = mainTotal - totalRUB;
         
         const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
@@ -180,7 +168,6 @@
         }
     }
     
-    // Редактирование расходов калькулятора
     function editCalcExpense(type) {
         let currentValue, promptText;
         switch(type) {
@@ -222,7 +209,7 @@
         .encar-panel::-webkit-scrollbar-thumb, .calc-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
         .collapse-btn { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: #fbbf24; border-radius: 50%; cursor: pointer; transition: all 0.2s ease; font-size: 16px; font-weight: bold; color: #0f172a; }
         .collapse-btn:hover { background: #d97706; transform: scale(1.05); }
-        .calc-collapse-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; cursor: pointer; transition: all 0.2s ease; font-size: 14px; font-weight: bold; color: #0f172a; }
+        .calc-collapse-btn { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; background: #fbbf24; border-radius: 50%; cursor: pointer; transition: all 0.2s ease; font-size: 12px; font-weight: bold; color: #0f172a; }
         .calc-collapse-btn:hover { background: #d97706; transform: scale(1.05); }
         .expense-header { cursor: pointer; transition: all 0.2s ease; }
         .expense-header:hover { opacity: 0.8; }
@@ -412,7 +399,7 @@
         }
     }
     
-    // Создание панели калькулятора слева
+    // Создание панели калькулятора (уменьшенная, ширина 180px)
     function createCalcPanel() {
         if (calcPanel) return;
         loadCalcExpenses();
@@ -427,13 +414,13 @@
             z-index: 10001 !important;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
             color: #f1f5f9 !important;
-            border-radius: 16px !important;
-            padding: 12px 16px !important;
+            border-radius: 12px !important;
+            padding: 8px 10px !important;
             font-family: 'Segoe UI', system-ui, sans-serif !important;
             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
             border: 1px solid rgba(251,191,36,0.3) !important;
-            font-size: 13px !important;
-            width: 280px !important;
+            font-size: 11px !important;
+            width: 180px !important;
             backdrop-filter: blur(8px) !important;
             cursor: move;
             user-select: none;
@@ -441,65 +428,65 @@
         `;
         
         calcPanel.innerHTML = `
-            <div id="calc-drag-handle" style="cursor: move; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(251,191,36,0.3);">
+            <div id="calc-drag-handle" style="cursor: move; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(251,191,36,0.3);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">⚙️ Админ</span>
+                    <span style="font-size: 13px; font-weight: 700; color: #fbbf24;">⚙️ Админ</span>
                     <div id="calc-collapse-btn" class="calc-collapse-btn">+</div>
                 </div>
             </div>
             <div id="calc-full-content" style="display: none;">
-                <div style="margin-bottom: 12px;">
-                    <div style="background: rgba(251,191,36,0.1); border-radius: 10px; padding: 10px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">💰 Цена в Корее (USD):</span>
+                <div style="margin-bottom: 6px;">
+                    <div style="background: rgba(251,191,36,0.1); border-radius: 8px; padding: 6px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">💰 Цена USD:</span>
                             <span id="calc-price-usd" style="color: #fbbf24; font-weight: 700;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">📉 Наша цена (-4%):</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">📉 -4%:</span>
                             <span id="calc-our-price" style="color: #22c55e; font-weight: 700;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
-                            <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Корея:</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; padding-top: 2px; border-top: 1px solid #334155;">
+                            <span style="color: #94a3b8; font-size: 10px;">➕ Корея:</span>
                             <span id="calc-korea-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">🏛️ ТПО:</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">🏛️ ТПО:</span>
                             <span id="calc-tpo" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Бишкек:</span>
-                            <span id="calc-bishkek-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">➕ Бишкек:</span>
+                            <span id="calc-bishkek-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
-                            <span style="color: #94a3b8; font-size: 12px;">💰 ИТОГО В USD:</span>
-                            <span id="calc-total-usd" style="color: #fbbf24; font-weight: 800; font-size: 15px;">—</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px; padding-top: 2px; border-top: 1px solid #334155;">
+                            <span style="color: #94a3b8; font-size: 10px;">💰 USD Итого:</span>
+                            <span id="calc-total-usd" style="color: #fbbf24; font-weight: 800;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">💎 Курс USDT:</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">💎 Курс USDT:</span>
                             <span id="calc-usdt-rate" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">♻️ Утильсбор:</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">♻️ Утиль:</span>
                             <span id="calc-util" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="color: #94a3b8; font-size: 12px;">📄 Документы РФ:</span>
-                            <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">📄 Документы:</span>
+                            <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
-                            <span style="color: #94a3b8; font-size: 12px;">💰 ИТОГО В ₽ (расчёт):</span>
-                            <span id="calc-total-rub" style="color: #22c55e; font-weight: 800; font-size: 15px;">—</span>
+                        <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; border-top: 1px solid #334155;">
+                            <span style="color: #94a3b8; font-size: 10px;">💰 ИТОГО:</span>
+                            <span id="calc-total-rub" style="color: #22c55e; font-weight: 800; font-size: 12px;">—</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid #fbbf24;">
-                            <span style="color: #94a3b8; font-size: 14px; font-weight: 700;">💰 НАЦЕНКА:</span>
-                            <span id="calc-markup" style="color: #fbbf24; font-size: 18px; font-weight: 800;">—</span>
+                        <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; border-top: 1px solid #fbbf24;">
+                            <span style="color: #94a3b8; font-size: 10px; font-weight: 700;">🏷️ НАЦЕНКА:</span>
+                            <span id="calc-markup" style="font-weight: 800; font-size: 12px;">—</span>
                         </div>
                     </div>
                 </div>
             </div>
             <div id="calc-collapsed-content" style="display: block;">
                 <div style="text-align: center;">
-                    <span style="color: #fbbf24; font-size: 14px; font-weight: 700;">⚙️ Админ</span>
+                    <span style="color: #fbbf24; font-size: 11px; font-weight: 700;">⚙️ Админ</span>
                 </div>
             </div>
         `;
@@ -561,15 +548,15 @@
                 if (isCalcCollapsed) {
                     calcFullContent.style.display = 'block';
                     calcCollapsedContent.style.display = 'none';
-                    calcPanel.style.width = '320px';
-                    calcPanel.style.padding = '12px 16px';
+                    calcPanel.style.width = '200px';
+                    calcPanel.style.padding = '8px 10px';
                     calcCollapseBtn.innerHTML = '−';
                     isCalcCollapsed = false;
                 } else {
                     calcFullContent.style.display = 'none';
                     calcCollapsedContent.style.display = 'block';
-                    calcPanel.style.width = '140px';
-                    calcPanel.style.padding = '10px 14px';
+                    calcPanel.style.width = '80px';
+                    calcPanel.style.padding = '6px 8px';
                     calcCollapseBtn.innerHTML = '+';
                     isCalcCollapsed = true;
                 }
@@ -783,7 +770,6 @@
         updateGlobalExpenses();
         updatePanel();
         
-        // Создаём панель калькулятора
         createCalcPanel();
         updateCalcPanel();
         
@@ -795,5 +781,5 @@
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v25.0 (Админ, свёрнут)');
+    console.log('[UI] Панель загружена v27.0 (Админ уменьшен)');
 })();
