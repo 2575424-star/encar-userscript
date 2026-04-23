@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      18.0
+// @version      18.1
 // @description  Финальная версия панели с детальными расходами
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -172,7 +172,7 @@
         const totalRFSpan = mainPanel.querySelector('#total-rf');
         if (totalRFSpan) totalRFSpan.textContent = `${formatNumber(calculateTotalRFRUB())} ₽`;
         
-        // Ручная таможенная стоимость (если установлена)
+        // Приоритет: ручное значение из localStorage, затем из Hub
         let customEuros = localStorage.getItem('encar_custom_euro_price');
         let euroPrice = Hub.get('selectedEuroPrice');
         if (customEuros && !isNaN(parseFloat(customEuros))) {
@@ -376,9 +376,15 @@
                 
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;">
                     <div style="font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:500;">🏛️ Таможня Киргизия</div>
-                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
                         <span style="font-size:14px;font-weight:500;">💰 Таможенная стоимость:</span>
-                        <span id="price-euro" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;text-decoration:underline;cursor:pointer;">—</span>
+                        <div>
+                            <span id="price-euro" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;text-decoration:underline;cursor:pointer;">—</span>
+                            <span id="price-arrow" style="margin-left:3px;font-size:9px;color:#94a3b8;cursor:pointer;">▼</span>
+                        </div>
+                    </div>
+                    <div id="price-content" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <div id="price-content-inner" style="font-size:11px;">Загрузка...</div>
                     </div>
                     <div style="display:flex;justify-content:space-between;">
                         <span style="font-size:14px;font-weight:500;">🏛️ ТПО:</span>
@@ -415,7 +421,7 @@
         
         document.body.appendChild(mainPanel);
         
-        // Drag & Drop
+        // ========== DRAG & DROP ==========
         const dragHandle = document.getElementById('drag-handle');
         if (dragHandle) {
             dragHandle.addEventListener('mousedown', (e) => {
@@ -444,7 +450,7 @@
         
         document.addEventListener('mouseup', () => { if (isDragging) { isDragging = false; mainPanel.style.cursor = 'move'; } });
         
-        // Раскрывающиеся блоки расходов
+        // ========== РАСКРЫВАЮЩИЕСЯ БЛОКИ РАСХОДОВ ==========
         const koreaHeader = document.getElementById('korea-header'), koreaContent = document.getElementById('korea-content'), koreaArrow = document.getElementById('korea-arrow');
         if (koreaHeader && koreaContent && koreaArrow) koreaHeader.onclick = () => { const isHidden = koreaContent.style.display === 'none'; koreaContent.style.display = isHidden ? 'block' : 'none'; koreaArrow.innerHTML = isHidden ? '▲' : '▼'; if (isHidden) updateDetailedExpenses(); };
         
@@ -454,7 +460,7 @@
         const rfHeader = document.getElementById('rf-header'), rfContent = document.getElementById('rf-content'), rfArrow = document.getElementById('rf-arrow');
         if (rfHeader && rfContent && rfArrow) rfHeader.onclick = () => { const isHidden = rfContent.style.display === 'none'; rfContent.style.display = isHidden ? 'block' : 'none'; rfArrow.innerHTML = isHidden ? '▲' : '▼'; if (isHidden) updateDetailedExpenses(); };
         
-        // Раскрывающийся блок страховых выплат
+        // ========== РАСКРЫВАЮЩИЙСЯ БЛОК СТРАХОВЫХ ВЫПЛАТ ==========
         const accidentHeader = document.getElementById('accident-header');
         const accidentContent = document.getElementById('accident-content');
         const accidentArrow = document.getElementById('accident-arrow');
@@ -463,7 +469,6 @@
                 if (accidentContent.style.display === 'none') {
                     accidentContent.style.display = 'block';
                     accidentArrow.innerHTML = '▲';
-                    // Загружаем детали страховых из Hub
                     const details = Hub.get('accidentDetails');
                     const detailsDiv = document.getElementById('accident-details');
                     if (detailsDiv) {
@@ -494,28 +499,51 @@
             };
         }
         
-        // Сворачивание панели
+        // ========== СВОРАЧИВАНИЕ ПАНЕЛИ ==========
         const collapseBtn = document.getElementById('collapse-btn'), fullContent = document.getElementById('panel-full-content'), collapsedContent = document.getElementById('panel-collapsed-content');
         if (collapseBtn && fullContent && collapsedContent) collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); if (isCollapsed) { fullContent.style.display = 'block'; collapsedContent.style.display = 'none'; mainPanel.style.width = '380px'; mainPanel.style.padding = '12px 16px'; collapseBtn.innerHTML = '−'; isCollapsed = false; } else { fullContent.style.display = 'none'; collapsedContent.style.display = 'block'; mainPanel.style.width = '200px'; mainPanel.style.padding = '10px 14px'; collapseBtn.innerHTML = '+'; isCollapsed = true; } });
         
-        // Обработчики
+        // ========== ОБРАБОТЧИКИ КУРСОВ ==========
         document.getElementById('usd-header').onclick = () => { const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5); if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val)); };
         document.getElementById('eur-header').onclick = () => { const val = prompt('Курс EUR/RUB:', Hub.get('eurRate') || 104.2); if (val && !isNaN(parseFloat(val))) Hub.set('eurRate', parseFloat(val)); };
         document.getElementById('krw-header').onclick = () => { const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473); if (val && !isNaN(parseFloat(val))) { Hub.set('usdToKrw', parseFloat(val)); updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); } };
         document.getElementById('usdt-header').onclick = () => { const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90); if (val && !isNaN(parseFloat(val))) Hub.set('usdtRate', parseFloat(val)); };
         
+        // ========== РЕДАКТИРУЕМЫЕ ПОЛЯ ==========
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
         document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); };
         document.getElementById('util-value').onclick = () => { const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || ''; const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current); if (val === '') Hub.set('manualUtilizationFee', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val)); };
         
-        // Ручной ввод таможенной стоимости
-        const priceEuroSpan = document.getElementById('price-euro');
-        if (priceEuroSpan) {
-            priceEuroSpan.onclick = () => {
+        // ========== МЕНЮ ЦЕНЫ И РУЧНОЙ ВВОД ==========
+        const priceSpan = document.getElementById('price-euro');
+        const priceContent = document.getElementById('price-content');
+        const priceArrow = document.getElementById('price-arrow');
+        
+        if (priceSpan && priceContent && priceArrow) {
+            // Клик по стрелке - открывает меню выбора
+            priceArrow.onclick = (e) => {
+                e.stopPropagation();
+                if (priceContent.style.display === 'none') {
+                    priceContent.style.display = 'block';
+                    priceArrow.innerHTML = '▲';
+                    if (unsafeWindow.EncarPrice?.updateDisplay) {
+                        unsafeWindow.EncarPrice.updateDisplay();
+                    } else if (Hub) {
+                        Hub.emit('priceContent:update', {});
+                    }
+                } else {
+                    priceContent.style.display = 'none';
+                    priceArrow.innerHTML = '▼';
+                }
+            };
+            
+            // Клик по цене - ручной ввод
+            priceSpan.onclick = (e) => {
+                e.stopPropagation();
                 const current = Hub.get('selectedEuroPrice') || '';
-                const val = prompt('Введите таможенную стоимость в EUR:', current);
+                const val = prompt('Введите таможенную стоимость в EUR (оставьте пустым для авто-выбора):', current);
                 if (val !== null && !isNaN(parseFloat(val))) {
                     const numVal = parseFloat(val);
                     localStorage.setItem('encar_custom_euro_price', numVal);
@@ -529,6 +557,7 @@
             };
         }
         
+        // ========== КНОПКИ ==========
         document.getElementById('refresh-panel-btn').onclick = () => { updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); if (unsafeWindow.EncarPrice?.refresh) unsafeWindow.EncarPrice.refresh(); console.log('[UI] Панель обновлена'); };
         document.getElementById('print-report-btn').onclick = () => { if (unsafeWindow.EncarPhotos?.print) unsafeWindow.EncarPhotos.print(); else alert('Модуль фото не загружен'); };
         
@@ -541,7 +570,6 @@
     Hub.on('any:changed', () => updatePanel());
     Hub.on('accidentData:loaded', (data) => {
         updatePanel();
-        // Обновляем детали страховых, если блок открыт
         const accidentContent = document.getElementById('accident-content');
         if (accidentContent && accidentContent.style.display === 'block') {
             const detailsDiv = document.getElementById('accident-details');
@@ -566,5 +594,5 @@
     });
     
     createPanel();
-    console.log('[UI] Панель с детальными расходами загружена v18.0');
+    console.log('[UI] Панель загружена v18.1');
 })();
