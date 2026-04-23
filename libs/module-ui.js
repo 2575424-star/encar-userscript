@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      20.0
-// @description  Финальная версия панели (без кнопки обновления)
+// @version      21.0
+// @description  Финальная версия панели с калькулятором слева
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -19,9 +19,12 @@
     
     const Hub = unsafeWindow.EncarHub;
     let mainPanel = null;
+    let calcPanel = null;
     let isDragging = false;
     let dragOffsetX = 0, dragOffsetY = 0;
     let isCollapsed = false;
+    let isCalcDragging = false;
+    let calcDragOffsetX = 0, calcDragOffsetY = 0;
     
     // ========== ДЕТАЛЬНЫЕ РАСХОДЫ ==========
     let koreaInspection = 150000;
@@ -95,17 +98,50 @@
         Hub.set('servicesBishkek', calculateTotalBishkekUSD());
         Hub.set('docsRf', calculateTotalRFRUB());
         Hub.emit('any:changed', {});
+        updateCalcPanel(); // Обновляем калькулятор
+    }
+    
+    // ========== КАЛЬКУЛЯТОР ==========
+    function updateCalcPanel() {
+        if (!calcPanel) return;
+        
+        const carPriceUSD = Hub.get('carPriceKrw') ? Math.round(Hub.get('carPriceKrw') / (Hub.get('usdToKrw') || 1473)) : 0;
+        const currentTpo = Hub.get('calculatedTpo') || 0;
+        const currentUsdtRate = Hub.get('usdtRate') || 90;
+        const currentDocsRf = Hub.get('docsRf') || 85000;
+        
+        // Наша цена: цена в USD минус 4%
+        const ourPrice = carPriceUSD * 0.96;
+        
+        // Сумма: наша цена + 4000 + ТПО + 1600
+        const totalUSD = ourPrice + 4000 + currentTpo + 1600;
+        
+        // Курс USDT минус 1
+        const calcRate = currentUsdtRate - 1;
+        
+        // Итог в рублях
+        const totalRUB = totalUSD * calcRate + currentDocsRf;
+        
+        const ourPriceSpan = calcPanel.querySelector('#calc-our-price');
+        const totalUSDSpan = calcPanel.querySelector('#calc-total-usd');
+        const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
+        
+        if (ourPriceSpan) ourPriceSpan.textContent = `${Math.round(ourPrice).toLocaleString()} $`;
+        if (totalUSDSpan) totalUSDSpan.textContent = `${Math.round(totalUSD).toLocaleString()} $`;
+        if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
     }
     
     // ========== СТИЛИ ==========
     GM_addStyle(`
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .encar-panel { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .encar-panel { animation: slideInRight 0.3s ease-out; }
+        .calc-panel { animation: slideIn 0.3s ease-out; }
         .encar-panel button, .encar-panel .clickable { transition: all 0.2s ease; cursor: pointer; }
         .encar-panel button:hover, .encar-panel .clickable:hover { transform: scale(1.02); opacity: 0.8; text-decoration: underline; }
-        .encar-panel::-webkit-scrollbar { width: 4px; }
-        .encar-panel::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 2px; }
-        .encar-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
+        .encar-panel::-webkit-scrollbar, .calc-panel::-webkit-scrollbar { width: 4px; }
+        .encar-panel::-webkit-scrollbar-track, .calc-panel::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        .encar-panel::-webkit-scrollbar-thumb, .calc-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
         .collapse-btn { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: #fbbf24; border-radius: 50%; cursor: pointer; transition: all 0.2s ease; font-size: 16px; font-weight: bold; color: #0f172a; }
         .collapse-btn:hover { background: #d97706; transform: scale(1.05); }
         .expense-header { cursor: pointer; transition: all 0.2s ease; }
@@ -206,6 +242,8 @@
         const usdtRate = Hub.get('usdtRate') || 0;
         const usdtHeader = mainPanel.querySelector('#usdt-header');
         if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
+        
+        updateCalcPanel();
     }
     
     function updateDetailedExpenses() {
@@ -292,6 +330,183 @@
         }
     }
     
+    // Создание панели калькулятора слева
+    function createCalcPanel() {
+        if (calcPanel) return;
+        
+        calcPanel = document.createElement('div');
+        calcPanel.className = 'calc-panel';
+        calcPanel.id = 'encar-calc-panel';
+        calcPanel.style.cssText = `
+            position: fixed !important;
+            bottom: 20px !important;
+            left: 20px !important;
+            z-index: 10001 !important;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+            color: #f1f5f9 !important;
+            border-radius: 16px !important;
+            padding: 12px 16px !important;
+            font-family: 'Segoe UI', system-ui, sans-serif !important;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
+            border: 1px solid rgba(251,191,36,0.3) !important;
+            font-size: 13px !important;
+            width: 280px !important;
+            backdrop-filter: blur(8px) !important;
+            cursor: move;
+            user-select: none;
+            transition: all 0.2s ease;
+        `;
+        
+        calcPanel.innerHTML = `
+            <div id="calc-drag-handle" style="cursor: move; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(251,191,36,0.3);">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">🧮 Калькулятор цены</span>
+                    <div id="calc-collapse-btn" class="collapse-btn" style="width: 22px; height: 22px; font-size: 14px;">−</div>
+                </div>
+            </div>
+            <div id="calc-full-content">
+                <div style="margin-bottom: 12px;">
+                    <div style="background: rgba(251,191,36,0.1); border-radius: 10px; padding: 10px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">💰 Цена в Корее (USD):</span>
+                            <span id="calc-price-usd" style="color: #fbbf24; font-weight: 700;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">📉 Наша цена (-4%):</span>
+                            <span id="calc-our-price" style="color: #22c55e; font-weight: 700;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
+                            <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Корея:</span>
+                            <span style="color: #fbbf24; font-weight: 600;">4 000 $</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">🏛️ ТПО:</span>
+                            <span id="calc-tpo" style="color: #fbbf24; font-weight: 600;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Бишкек:</span>
+                            <span style="color: #fbbf24; font-weight: 600;">1 600 $</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
+                            <span style="color: #94a3b8; font-size: 12px;">💰 ИТОГО В USD:</span>
+                            <span id="calc-total-usd" style="color: #fbbf24; font-weight: 800; font-size: 15px;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">💎 Курс USDT:</span>
+                            <span id="calc-usdt-rate" style="color: #fbbf24; font-weight: 600;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">📄 Документы РФ:</span>
+                            <span id="calc-docs" style="color: #fbbf24; font-weight: 600;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid #fbbf24;">
+                            <span style="color: #94a3b8; font-size: 14px; font-weight: 700;">💰 ИТОГО В ₽:</span>
+                            <span id="calc-total-rub" style="color: #fbbf24; font-size: 18px; font-weight: 800;">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="calc-collapsed-content" style="display: none;">
+                <div style="text-align: center;">
+                    <span style="color: #fbbf24; font-size: 14px; font-weight: 700;">Калькулятор</span>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(calcPanel);
+        
+        // Drag & Drop для калькулятора
+        const calcDragHandle = document.getElementById('calc-drag-handle');
+        if (calcDragHandle) {
+            calcDragHandle.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                if (e.target.id === 'calc-collapse-btn') return;
+                isCalcDragging = true;
+                const rect = calcPanel.getBoundingClientRect();
+                calcDragOffsetX = e.clientX - rect.left;
+                calcDragOffsetY = e.clientY - rect.top;
+                calcPanel.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+        }
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isCalcDragging) return;
+            let newLeft = e.clientX - calcDragOffsetX;
+            let newTop = e.clientY - calcDragOffsetY;
+            newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - calcPanel.offsetWidth));
+            newTop = Math.max(0, Math.min(newTop, window.innerHeight - calcPanel.offsetHeight));
+            calcPanel.style.left = newLeft + 'px';
+            calcPanel.style.top = newTop + 'px';
+            calcPanel.style.right = 'auto';
+            calcPanel.style.bottom = 'auto';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isCalcDragging) {
+                isCalcDragging = false;
+                calcPanel.style.cursor = 'move';
+            }
+        });
+        
+        // Сворачивание калькулятора
+        const calcCollapseBtn = document.getElementById('calc-collapse-btn');
+        const calcFullContent = document.getElementById('calc-full-content');
+        const calcCollapsedContent = document.getElementById('calc-collapsed-content');
+        let isCalcCollapsed = false;
+        
+        if (calcCollapseBtn && calcFullContent && calcCollapsedContent) {
+            calcCollapseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (isCalcCollapsed) {
+                    calcFullContent.style.display = 'block';
+                    calcCollapsedContent.style.display = 'none';
+                    calcPanel.style.width = '280px';
+                    calcPanel.style.padding = '12px 16px';
+                    calcCollapseBtn.innerHTML = '−';
+                    isCalcCollapsed = false;
+                } else {
+                    calcFullContent.style.display = 'none';
+                    calcCollapsedContent.style.display = 'block';
+                    calcPanel.style.width = '140px';
+                    calcPanel.style.padding = '10px 14px';
+                    calcCollapseBtn.innerHTML = '+';
+                    isCalcCollapsed = true;
+                }
+            });
+        }
+    }
+    
+    function updateCalcPanelData() {
+        if (!calcPanel) return;
+        const carPriceUSD = Hub.get('carPriceKrw') ? Math.round(Hub.get('carPriceKrw') / (Hub.get('usdToKrw') || 1473)) : 0;
+        const currentTpo = Hub.get('calculatedTpo') || 0;
+        const currentUsdtRate = Hub.get('usdtRate') || 90;
+        const currentDocsRf = Hub.get('docsRf') || 85000;
+        
+        const ourPrice = carPriceUSD * 0.96;
+        const totalUSD = ourPrice + 4000 + currentTpo + 1600;
+        const calcRate = currentUsdtRate - 1;
+        const totalRUB = totalUSD * calcRate + currentDocsRf;
+        
+        const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
+        const ourPriceSpan = calcPanel.querySelector('#calc-our-price');
+        const tpoSpan = calcPanel.querySelector('#calc-tpo');
+        const totalUSDSpan = calcPanel.querySelector('#calc-total-usd');
+        const usdtRateSpan = calcPanel.querySelector('#calc-usdt-rate');
+        const docsSpan = calcPanel.querySelector('#calc-docs');
+        const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
+        
+        if (priceUsdSpan) priceUsdSpan.textContent = `${Math.round(carPriceUSD).toLocaleString()} $`;
+        if (ourPriceSpan) ourPriceSpan.textContent = `${Math.round(ourPrice).toLocaleString()} $`;
+        if (tpoSpan) tpoSpan.textContent = `${Math.round(currentTpo).toLocaleString()} $`;
+        if (totalUSDSpan) totalUSDSpan.textContent = `${Math.round(totalUSD).toLocaleString()} $`;
+        if (usdtRateSpan) usdtRateSpan.textContent = `${currentUsdtRate.toFixed(2)} ₽ (x${calcRate.toFixed(2)})`;
+        if (docsSpan) docsSpan.textContent = `${Math.round(currentDocsRf).toLocaleString()} ₽`;
+        if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
+    }
+    
+    // Создание основной панели
     function createPanel() {
         if (mainPanel) return;
         loadDetailedSettings();
@@ -468,15 +683,15 @@
         if (collapseBtn && fullContent && collapsedContent) collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); if (isCollapsed) { fullContent.style.display = 'block'; collapsedContent.style.display = 'none'; mainPanel.style.width = '380px'; mainPanel.style.padding = '12px 16px'; collapseBtn.innerHTML = '−'; isCollapsed = false; } else { fullContent.style.display = 'none'; collapsedContent.style.display = 'block'; mainPanel.style.width = '200px'; mainPanel.style.padding = '10px 14px'; collapseBtn.innerHTML = '+'; isCollapsed = true; } });
         
         // Обработчики
-        document.getElementById('usd-header').onclick = () => { const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5); if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val)); };
+        document.getElementById('usd-header').onclick = () => { const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5); if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val)); updateCalcPanelData(); };
         document.getElementById('eur-header').onclick = () => { const val = prompt('Курс EUR/RUB:', Hub.get('eurRate') || 104.2); if (val && !isNaN(parseFloat(val))) Hub.set('eurRate', parseFloat(val)); };
-        document.getElementById('krw-header').onclick = () => { const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473); if (val && !isNaN(parseFloat(val))) { Hub.set('usdToKrw', parseFloat(val)); updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); } };
-        document.getElementById('usdt-header').onclick = () => { const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90); if (val && !isNaN(parseFloat(val))) Hub.set('usdtRate', parseFloat(val)); };
+        document.getElementById('krw-header').onclick = () => { const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473); if (val && !isNaN(parseFloat(val))) { Hub.set('usdToKrw', parseFloat(val)); updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); updateCalcPanelData(); } };
+        document.getElementById('usdt-header').onclick = () => { const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90); if (val && !isNaN(parseFloat(val))) { Hub.set('usdtRate', parseFloat(val)); updatePanel(); updateCalcPanelData(); } };
         
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
-        document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); };
+        document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); updateCalcPanelData(); };
         document.getElementById('util-value').onclick = () => { const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || ''; const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current); if (val === '') Hub.set('manualUtilizationFee', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val)); };
         
         // Меню цены
@@ -494,13 +709,18 @@
         updateDetailedExpenses();
         updateGlobalExpenses();
         updatePanel();
-        setInterval(() => updatePanel(), 5000);
+        
+        // Создаём панель калькулятора
+        createCalcPanel();
+        updateCalcPanelData();
+        
+        setInterval(() => { updatePanel(); updateCalcPanelData(); }, 5000);
     }
     
-    Hub.on('any:changed', () => updatePanel());
+    Hub.on('any:changed', () => { updatePanel(); updateCalcPanelData(); });
     Hub.on('priceContent:update', () => { if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay(); });
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v20.0 (без кнопки обновления)');
+    console.log('[UI] Панель загружена v21.0 (с калькулятором слева)');
 })();
