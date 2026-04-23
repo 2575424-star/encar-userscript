@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      21.0
+// @version      22.0
 // @description  Финальная версия панели с калькулятором слева
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -25,6 +25,32 @@
     let isCollapsed = false;
     let isCalcDragging = false;
     let calcDragOffsetX = 0, calcDragOffsetY = 0;
+    
+    // ========== РЕДАКТИРУЕМЫЕ РАСХОДЫ ДЛЯ КАЛЬКУЛЯТОРА ==========
+    let calcKoreaExpenses = 4000;   // Расходы Корея
+    let calcBishkekExpenses = 1600; // Расходы Бишкек
+    let calcDocsRf = 85000;         // Документы РФ
+    
+    // Загрузка сохранённых расходов
+    function loadCalcExpenses() {
+        const saved = localStorage.getItem('encar_calc_expenses');
+        if (saved) {
+            try {
+                const settings = JSON.parse(saved);
+                calcKoreaExpenses = settings.koreaExpenses || 4000;
+                calcBishkekExpenses = settings.bishkekExpenses || 1600;
+                calcDocsRf = settings.docsRf || 85000;
+            } catch(e) {}
+        }
+    }
+    
+    function saveCalcExpenses() {
+        localStorage.setItem('encar_calc_expenses', JSON.stringify({
+            koreaExpenses: calcKoreaExpenses,
+            bishkekExpenses: calcBishkekExpenses,
+            docsRf: calcDocsRf
+        }));
+    }
     
     // ========== ДЕТАЛЬНЫЕ РАСХОДЫ ==========
     let koreaInspection = 150000;
@@ -108,27 +134,70 @@
         const carPriceUSD = Hub.get('carPriceKrw') ? Math.round(Hub.get('carPriceKrw') / (Hub.get('usdToKrw') || 1473)) : 0;
         const currentTpo = Hub.get('calculatedTpo') || 0;
         const currentUsdtRate = Hub.get('usdtRate') || 90;
-        const currentDocsRf = Hub.get('docsRf') || 85000;
+        const utilizationFee = Hub.get('utilizationFee') || 0;
         
         // Наша цена: цена в USD минус 4%
         const ourPrice = carPriceUSD * 0.96;
         
-        // Сумма: наша цена + 4000 + ТПО + 1600
-        const totalUSD = ourPrice + 4000 + currentTpo + 1600;
+        // Сумма: наша цена + расходы Корея + ТПО + расходы Бишкек + утильсбор
+        const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses + (utilizationFee / (currentUsdtRate - 1));
         
         // Курс USDT минус 1
         const calcRate = currentUsdtRate - 1;
         
         // Итог в рублях
-        const totalRUB = totalUSD * calcRate + currentDocsRf;
+        const totalRUB = totalUSD * calcRate + calcDocsRf;
         
+        const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
         const ourPriceSpan = calcPanel.querySelector('#calc-our-price');
+        const tpoSpan = calcPanel.querySelector('#calc-tpo');
+        const utilSpan = calcPanel.querySelector('#calc-util');
         const totalUSDSpan = calcPanel.querySelector('#calc-total-usd');
+        const usdtRateSpan = calcPanel.querySelector('#calc-usdt-rate');
+        const docsSpan = calcPanel.querySelector('#calc-docs');
+        const koreaSpan = calcPanel.querySelector('#calc-korea-value');
+        const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
         const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
         
+        if (priceUsdSpan) priceUsdSpan.textContent = `${Math.round(carPriceUSD).toLocaleString()} $`;
         if (ourPriceSpan) ourPriceSpan.textContent = `${Math.round(ourPrice).toLocaleString()} $`;
+        if (tpoSpan) tpoSpan.textContent = `${Math.round(currentTpo).toLocaleString()} $`;
+        if (utilSpan) utilSpan.textContent = `${Math.round(utilizationFee).toLocaleString()} ₽`;
         if (totalUSDSpan) totalUSDSpan.textContent = `${Math.round(totalUSD).toLocaleString()} $`;
+        if (usdtRateSpan) usdtRateSpan.textContent = `${currentUsdtRate.toFixed(2)} ₽ (x${calcRate.toFixed(2)})`;
+        if (docsSpan) docsSpan.textContent = `${Math.round(calcDocsRf).toLocaleString()} ₽`;
+        if (koreaSpan) koreaSpan.textContent = `${calcKoreaExpenses.toLocaleString()} $`;
+        if (bishkekSpan) bishkekSpan.textContent = `${calcBishkekExpenses.toLocaleString()} $`;
         if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
+    }
+    
+    // Редактирование расходов калькулятора
+    function editCalcExpense(type) {
+        let currentValue, promptText;
+        switch(type) {
+            case 'korea':
+                currentValue = calcKoreaExpenses;
+                promptText = 'Расходы Корея ($):';
+                break;
+            case 'bishkek':
+                currentValue = calcBishkekExpenses;
+                promptText = 'Расходы Бишкек ($):';
+                break;
+            case 'docs':
+                currentValue = calcDocsRf;
+                promptText = 'Документы РФ (₽):';
+                break;
+            default: return;
+        }
+        const newValue = prompt(promptText, currentValue);
+        if (newValue !== null && !isNaN(parseFloat(newValue))) {
+            const numValue = parseFloat(newValue);
+            if (type === 'korea') calcKoreaExpenses = numValue;
+            if (type === 'bishkek') calcBishkekExpenses = numValue;
+            if (type === 'docs') calcDocsRf = numValue;
+            saveCalcExpenses();
+            updateCalcPanel();
+        }
     }
     
     // ========== СТИЛИ ==========
@@ -144,6 +213,8 @@
         .encar-panel::-webkit-scrollbar-thumb, .calc-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
         .collapse-btn { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: #fbbf24; border-radius: 50%; cursor: pointer; transition: all 0.2s ease; font-size: 16px; font-weight: bold; color: #0f172a; }
         .collapse-btn:hover { background: #d97706; transform: scale(1.05); }
+        .calc-collapse-btn { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: #fbbf24; border-radius: 50%; cursor: pointer; transition: all 0.2s ease; font-size: 14px; font-weight: bold; color: #0f172a; }
+        .calc-collapse-btn:hover { background: #d97706; transform: scale(1.05); }
         .expense-header { cursor: pointer; transition: all 0.2s ease; }
         .expense-header:hover { opacity: 0.8; }
         .expense-content { margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.3); border-radius: 8px; font-size: 11px; }
@@ -153,6 +224,8 @@
         .expense-value:hover { text-decoration: underline; }
         .accident-header { cursor: pointer; transition: all 0.2s ease; }
         .accident-header:hover { opacity: 0.8; }
+        .calc-clickable { cursor: pointer; transition: all 0.2s ease; }
+        .calc-clickable:hover { opacity: 0.8; text-decoration: underline; }
     `);
     
     function formatVolume(cc) { if (!cc) return '—'; const liters = cc / 1000; return Number.isInteger(liters) ? `${liters}.0L` : `${liters.toFixed(1)}L`; }
@@ -330,9 +403,10 @@
         }
     }
     
-    // Создание панели калькулятора слева
+    // Создание панели калькулятора слева (свёрнута по умолчанию)
     function createCalcPanel() {
         if (calcPanel) return;
+        loadCalcExpenses();
         
         calcPanel = document.createElement('div');
         calcPanel.className = 'calc-panel';
@@ -361,10 +435,10 @@
             <div id="calc-drag-handle" style="cursor: move; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(251,191,36,0.3);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">🧮 Калькулятор цены</span>
-                    <div id="calc-collapse-btn" class="collapse-btn" style="width: 22px; height: 22px; font-size: 14px;">−</div>
+                    <div id="calc-collapse-btn" class="calc-collapse-btn">+</div>
                 </div>
             </div>
-            <div id="calc-full-content">
+            <div id="calc-full-content" style="display: none;">
                 <div style="margin-bottom: 12px;">
                     <div style="background: rgba(251,191,36,0.1); border-radius: 10px; padding: 10px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -377,7 +451,7 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
                             <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Корея:</span>
-                            <span style="color: #fbbf24; font-weight: 600;">4 000 $</span>
+                            <span id="calc-korea-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: #94a3b8; font-size: 12px;">🏛️ ТПО:</span>
@@ -385,7 +459,11 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: #94a3b8; font-size: 12px;">➕ Расходы Бишкек:</span>
-                            <span style="color: #fbbf24; font-weight: 600;">1 600 $</span>
+                            <span id="calc-bishkek-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: #94a3b8; font-size: 12px;">♻️ Утильсбор:</span>
+                            <span id="calc-util" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
                             <span style="color: #94a3b8; font-size: 12px;">💰 ИТОГО В USD:</span>
@@ -397,7 +475,7 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: #94a3b8; font-size: 12px;">📄 Документы РФ:</span>
-                            <span id="calc-docs" style="color: #fbbf24; font-weight: 600;">—</span>
+                            <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid #fbbf24;">
                             <span style="color: #94a3b8; font-size: 14px; font-weight: 700;">💰 ИТОГО В ₽:</span>
@@ -406,14 +484,23 @@
                     </div>
                 </div>
             </div>
-            <div id="calc-collapsed-content" style="display: none;">
+            <div id="calc-collapsed-content" style="display: block;">
                 <div style="text-align: center;">
-                    <span style="color: #fbbf24; font-size: 14px; font-weight: 700;">Калькулятор</span>
+                    <span style="color: #fbbf24; font-size: 14px; font-weight: 700;">🧮 Калькулятор</span>
                 </div>
             </div>
         `;
         
         document.body.appendChild(calcPanel);
+        
+        // Добавляем обработчики кликов для редактирования
+        const koreaSpan = calcPanel.querySelector('#calc-korea-value');
+        const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
+        const docsSpan = calcPanel.querySelector('#calc-docs-value');
+        
+        if (koreaSpan) koreaSpan.onclick = () => editCalcExpense('korea');
+        if (bishkekSpan) bishkekSpan.onclick = () => editCalcExpense('bishkek');
+        if (docsSpan) docsSpan.onclick = () => editCalcExpense('docs');
         
         // Drag & Drop для калькулятора
         const calcDragHandle = document.getElementById('calc-drag-handle');
@@ -449,11 +536,11 @@
             }
         });
         
-        // Сворачивание калькулятора
+        // Сворачивание калькулятора (по умолчанию свёрнут)
         const calcCollapseBtn = document.getElementById('calc-collapse-btn');
         const calcFullContent = document.getElementById('calc-full-content');
         const calcCollapsedContent = document.getElementById('calc-collapsed-content');
-        let isCalcCollapsed = false;
+        let isCalcCollapsed = true; // По умолчанию свёрнут
         
         if (calcCollapseBtn && calcFullContent && calcCollapsedContent) {
             calcCollapseBtn.addEventListener('click', (e) => {
@@ -461,7 +548,7 @@
                 if (isCalcCollapsed) {
                     calcFullContent.style.display = 'block';
                     calcCollapsedContent.style.display = 'none';
-                    calcPanel.style.width = '280px';
+                    calcPanel.style.width = '320px';
                     calcPanel.style.padding = '12px 16px';
                     calcCollapseBtn.innerHTML = '−';
                     isCalcCollapsed = false;
@@ -475,35 +562,8 @@
                 }
             });
         }
-    }
-    
-    function updateCalcPanelData() {
-        if (!calcPanel) return;
-        const carPriceUSD = Hub.get('carPriceKrw') ? Math.round(Hub.get('carPriceKrw') / (Hub.get('usdToKrw') || 1473)) : 0;
-        const currentTpo = Hub.get('calculatedTpo') || 0;
-        const currentUsdtRate = Hub.get('usdtRate') || 90;
-        const currentDocsRf = Hub.get('docsRf') || 85000;
         
-        const ourPrice = carPriceUSD * 0.96;
-        const totalUSD = ourPrice + 4000 + currentTpo + 1600;
-        const calcRate = currentUsdtRate - 1;
-        const totalRUB = totalUSD * calcRate + currentDocsRf;
-        
-        const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
-        const ourPriceSpan = calcPanel.querySelector('#calc-our-price');
-        const tpoSpan = calcPanel.querySelector('#calc-tpo');
-        const totalUSDSpan = calcPanel.querySelector('#calc-total-usd');
-        const usdtRateSpan = calcPanel.querySelector('#calc-usdt-rate');
-        const docsSpan = calcPanel.querySelector('#calc-docs');
-        const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
-        
-        if (priceUsdSpan) priceUsdSpan.textContent = `${Math.round(carPriceUSD).toLocaleString()} $`;
-        if (ourPriceSpan) ourPriceSpan.textContent = `${Math.round(ourPrice).toLocaleString()} $`;
-        if (tpoSpan) tpoSpan.textContent = `${Math.round(currentTpo).toLocaleString()} $`;
-        if (totalUSDSpan) totalUSDSpan.textContent = `${Math.round(totalUSD).toLocaleString()} $`;
-        if (usdtRateSpan) usdtRateSpan.textContent = `${currentUsdtRate.toFixed(2)} ₽ (x${calcRate.toFixed(2)})`;
-        if (docsSpan) docsSpan.textContent = `${Math.round(currentDocsRf).toLocaleString()} ₽`;
-        if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
+        updateCalcPanel();
     }
     
     // Создание основной панели
@@ -683,16 +743,16 @@
         if (collapseBtn && fullContent && collapsedContent) collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); if (isCollapsed) { fullContent.style.display = 'block'; collapsedContent.style.display = 'none'; mainPanel.style.width = '380px'; mainPanel.style.padding = '12px 16px'; collapseBtn.innerHTML = '−'; isCollapsed = false; } else { fullContent.style.display = 'none'; collapsedContent.style.display = 'block'; mainPanel.style.width = '200px'; mainPanel.style.padding = '10px 14px'; collapseBtn.innerHTML = '+'; isCollapsed = true; } });
         
         // Обработчики
-        document.getElementById('usd-header').onclick = () => { const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5); if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val)); updateCalcPanelData(); };
+        document.getElementById('usd-header').onclick = () => { const val = prompt('Курс USD/RUB:', Hub.get('usdRate') || 96.5); if (val && !isNaN(parseFloat(val))) Hub.set('usdRate', parseFloat(val)); updateCalcPanel(); };
         document.getElementById('eur-header').onclick = () => { const val = prompt('Курс EUR/RUB:', Hub.get('eurRate') || 104.2); if (val && !isNaN(parseFloat(val))) Hub.set('eurRate', parseFloat(val)); };
-        document.getElementById('krw-header').onclick = () => { const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473); if (val && !isNaN(parseFloat(val))) { Hub.set('usdToKrw', parseFloat(val)); updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); updateCalcPanelData(); } };
-        document.getElementById('usdt-header').onclick = () => { const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90); if (val && !isNaN(parseFloat(val))) { Hub.set('usdtRate', parseFloat(val)); updatePanel(); updateCalcPanelData(); } };
+        document.getElementById('krw-header').onclick = () => { const val = prompt('Курс USD/KRW:', Hub.get('usdToKrw') || 1473); if (val && !isNaN(parseFloat(val))) { Hub.set('usdToKrw', parseFloat(val)); updateDetailedExpenses(); updateGlobalExpenses(); updatePanel(); updateCalcPanel(); } };
+        document.getElementById('usdt-header').onclick = () => { const val = prompt('Курс USDT/RUB:', Hub.get('usdtRate') || 90); if (val && !isNaN(parseFloat(val))) { Hub.set('usdtRate', parseFloat(val)); updatePanel(); updateCalcPanel(); } };
         
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
-        document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); updateCalcPanelData(); };
-        document.getElementById('util-value').onclick = () => { const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || ''; const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current); if (val === '') Hub.set('manualUtilizationFee', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val)); };
+        document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); updateCalcPanel(); };
+        document.getElementById('util-value').onclick = () => { const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || ''; const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current); if (val === '') Hub.set('manualUtilizationFee', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val)); updateCalcPanel(); };
         
         // Меню цены
         const priceSpan = document.getElementById('price-euro');
@@ -712,15 +772,15 @@
         
         // Создаём панель калькулятора
         createCalcPanel();
-        updateCalcPanelData();
+        updateCalcPanel();
         
-        setInterval(() => { updatePanel(); updateCalcPanelData(); }, 5000);
+        setInterval(() => { updatePanel(); updateCalcPanel(); }, 5000);
     }
     
-    Hub.on('any:changed', () => { updatePanel(); updateCalcPanelData(); });
+    Hub.on('any:changed', () => { updatePanel(); updateCalcPanel(); });
     Hub.on('priceContent:update', () => { if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay(); });
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v21.0 (с калькулятором слева)');
+    console.log('[UI] Панель загружена v22.0 (калькулятор слева, свёрнут)');
 })();
