@@ -1,4 +1,4 @@
-// ========== КНОПКА РАСЧЁТА (вместо обновления) ==========
+// ========== КНОПКА КАЛЬКУЛЯТОРА НАЦЕНКИ ==========
 document.getElementById('refresh-panel-btn').onclick = () => {
     // Получаем текущие значения
     const currentTotal = Hub.get('totalPrice') || 0;
@@ -7,19 +7,21 @@ document.getElementById('refresh-panel-btn').onclick = () => {
     const currentDocsRf = Hub.get('docsRf') || 85000;
     const currentUsdtRate = Hub.get('usdtRate') || 90;
     
-    // Значения по умолчанию
-    let markupPercent = 4;      // Наценка 4%
+    // Значения по умолчанию (вычитаем 4% от стоимости авто)
+    let defaultMarkup = -4;  // -4% (вычитаем 4%)
     let koreaExpenses = 4000;   // Расходы Корея
     let bishkekExpenses = 2000; // Расходы Бишкек
     
-    // Сохраняем предыдущие значения в localStorage для повторного использования
+    // Сохраняем предыдущие значения в localStorage
     const savedMarkup = localStorage.getItem('calc_markup_percent');
     const savedKorea = localStorage.getItem('calc_korea_expenses');
     const savedBishkek = localStorage.getItem('calc_bishkek_expenses');
+    const savedDocs = localStorage.getItem('calc_docs_rf');
     
-    if (savedMarkup) markupPercent = parseFloat(savedMarkup);
+    if (savedMarkup) defaultMarkup = parseFloat(savedMarkup);
     if (savedKorea) koreaExpenses = parseFloat(savedKorea);
     if (savedBishkek) bishkekExpenses = parseFloat(savedBishkek);
+    if (savedDocs) currentDocsRf = parseFloat(savedDocs);
     
     // Создаём модальное окно
     const modal = document.createElement('div');
@@ -32,7 +34,7 @@ document.getElementById('refresh-panel-btn').onclick = () => {
         color: #f1f5f9;
         border-radius: 20px;
         padding: 20px;
-        width: 420px;
+        width: 450px;
         max-width: 90vw;
         z-index: 100000;
         box-shadow: 0 20px 40px rgba(0,0,0,0.5);
@@ -57,9 +59,9 @@ document.getElementById('refresh-panel-btn').onclick = () => {
         <div style="margin-bottom: 15px;">
             <label style="display: flex; justify-content: space-between; align-items: center;">
                 <span style="color: #94a3b8;">📈 Наценка (%):</span>
-                <input type="number" id="calc-markup" value="${markupPercent}" step="0.5" style="width: 100px; padding: 6px; background: #0f172a; color: white; border: 1px solid #475569; border-radius: 8px; text-align: right;">
+                <input type="number" id="calc-markup" value="${defaultMarkup}" step="0.5" style="width: 100px; padding: 6px; background: #0f172a; color: white; border: 1px solid #475569; border-radius: 8px; text-align: right;">
             </label>
-            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Процент от стоимости авто</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Отрицательное значение = вычитаем %</div>
         </div>
         
         <div style="margin-bottom: 15px;">
@@ -92,15 +94,15 @@ document.getElementById('refresh-panel-btn').onclick = () => {
         </div>
         
         <div style="margin-bottom: 15px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <label style="display: flex; justify-content: space-between; align-items: center;">
                 <span style="color: #94a3b8;">📄 Документы РФ (₽):</span>
-                <span style="font-weight: 700; color: #fbbf24;">${currentDocsRf.toLocaleString()} ₽</span>
-            </div>
+                <input type="number" id="calc-docs" value="${currentDocsRf}" step="1000" style="width: 120px; padding: 6px; background: #0f172a; color: white; border: 1px solid #475569; border-radius: 8px; text-align: right;">
+            </label>
         </div>
         
         <div style="background: rgba(251,191,36,0.1); border-radius: 12px; padding: 15px; margin-bottom: 15px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: #94a3b8;">💰 РАСЧЁТНАЯ ЦЕНА:</span>
+                <span style="color: #94a3b8;">💰 РАСЧЁТНАЯ ЦЕНА (РЕЗУЛЬТАТ 1):</span>
                 <span id="calc-result" style="font-size: 20px; font-weight: 800; color: #fbbf24;">0 ₽</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -108,8 +110,8 @@ document.getElementById('refresh-panel-btn').onclick = () => {
                 <span style="font-size: 16px; font-weight: 700; color: #22c55e;">${currentTotal.toLocaleString()} ₽</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid #334155;">
-                <span style="color: #94a3b8;">🏷️ НАЦЕНКА:</span>
-                <span id="calc-difference" style="font-size: 16px; font-weight: 800; color: #f97316;">0 ₽</span>
+                <span style="color: #94a3b8;">🏷️ НАЦЕНКА (РЕЗУЛЬТАТ 2):</span>
+                <span id="calc-difference" style="font-size: 18px; font-weight: 800; color: #f97316;">0 ₽</span>
             </div>
         </div>
         
@@ -126,20 +128,21 @@ document.getElementById('refresh-panel-btn').onclick = () => {
         const markupPercent = parseFloat(document.getElementById('calc-markup').value) || 0;
         const koreaExp = parseFloat(document.getElementById('calc-korea').value) || 0;
         const bishkekExp = parseFloat(document.getElementById('calc-bishkek').value) || 0;
+        const docsRf = parseFloat(document.getElementById('calc-docs').value) || currentDocsRf;
         
-        // Расчёт наценки от стоимости авто
+        // Расчёт наценки от стоимости авто (при отрицательном значении - вычитаем)
         const markupAmount = carPriceUSD * (markupPercent / 100);
         
-        // Сумма в USD
+        // Сумма в USD: Стоимость авто + наценка + расходы Корея + ТПО + расходы Бишкек
         const totalUSD = carPriceUSD + markupAmount + koreaExp + currentTpo + bishkekExp;
         
         // Курс для расчёта (USDT - 1)
         const calcRate = currentUsdtRate - 1;
         
-        // Итог в рублях
-        const totalRUB = totalUSD * calcRate + currentDocsRf;
+        // Итог в рублях (РЕЗУЛЬТАТ 1)
+        const totalRUB = totalUSD * calcRate + docsRf;
         
-        // Разница с текущей итоговой ценой
+        // Разница с текущей итоговой ценой (РЕЗУЛЬТАТ 2 = наценка)
         const difference = totalRUB - currentTotal;
         
         document.getElementById('calc-result').innerHTML = `${Math.round(totalRUB).toLocaleString()} ₽`;
@@ -154,20 +157,23 @@ document.getElementById('refresh-panel-btn').onclick = () => {
         }
     }
     
-    // Применить расходы (сохранить в localStorage и в Hub)
+    // Применить расходы (сохранить в localStorage)
     function applyExpenses() {
         const koreaExp = parseFloat(document.getElementById('calc-korea').value) || 0;
         const bishkekExp = parseFloat(document.getElementById('calc-bishkek').value) || 0;
         const markupPercent = parseFloat(document.getElementById('calc-markup').value) || 0;
+        const docsRf = parseFloat(document.getElementById('calc-docs').value) || currentDocsRf;
         
         // Сохраняем в localStorage
         localStorage.setItem('calc_korea_expenses', koreaExp);
         localStorage.setItem('calc_bishkek_expenses', bishkekExp);
         localStorage.setItem('calc_markup_percent', markupPercent);
+        localStorage.setItem('calc_docs_rf', docsRf);
         
         // Обновляем расходы в Hub
         Hub.set('koreaLogistics', koreaExp);
         Hub.set('servicesBishkek', bishkekExp);
+        Hub.set('docsRf', docsRf);
         
         // Пересчитываем итог
         Hub.emit('any:changed', {});
