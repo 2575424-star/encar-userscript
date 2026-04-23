@@ -232,7 +232,7 @@ body{font-family:'Inter','Segoe UI',system-ui;background:#e8edf2;padding:30px}
 <div class="info-row"><span class="info-label">💸 Страховые выплаты</span><span class="info-value" style="color:#fbbf24;">${Hub.get('accidentTotal') || '—'}</span></div>
 </div></div>
 <div class="section"><div class="section-title"><span class="section-icon">💰</span>РАСЧЁТ СТОИМОСТИ</div>
-<div class="info-grid" style="margin-bottom:20px;"><div class="info-row"><span class="info-label">💰 Цена в Корее</span><span class="info-value">${carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—'} / ${priceUsd ? formatNumber(priceUsd) + ' $' : '—'}</span></div></div>
+<div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;text-align:center;"><div style="font-size:12px;color:#94a3b8;margin-bottom:6px;font-weight:500;">💰 Цена авто в Корее</div><div id="price-value" style="color:#fbbf24;font-weight:700;font-size:16px;">—</div></div>
 <div style="margin-bottom:16px;"><div style="font-weight:700;margin-bottom:8px;">🇰🇷 Расходы Корея</div>
 <div class="expense-detail">
 <div class="expense-detail-row"><span class="expense-detail-label">🔍 Осмотр авто:</span><span class="expense-detail-value">${formatNumber(koreaInspection)} ₩ (${Math.round(koreaInspection/usdToKrw)} $)</span></div>
