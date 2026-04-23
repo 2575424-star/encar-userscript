@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      24.0
+// @version      25.0
 // @description  Финальная версия панели с калькулятором слева
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
@@ -124,7 +124,7 @@
         Hub.set('servicesBishkek', calculateTotalBishkekUSD());
         Hub.set('docsRf', calculateTotalRFRUB());
         Hub.emit('any:changed', {});
-        updateCalcPanel(); // Обновляем калькулятор
+        updateCalcPanel();
     }
     
     // ========== КАЛЬКУЛЯТОР ==========
@@ -135,6 +135,7 @@
         const currentTpo = Hub.get('calculatedTpo') || 0;
         const currentUsdtRate = Hub.get('usdtRate') || 90;
         const utilizationFee = Hub.get('utilizationFee') || 0;
+        const mainTotal = Hub.get('totalPrice') || 0;
         
         // Наша цена: цена в USD минус 4%
         const ourPrice = carPriceUSD * 0.96;
@@ -148,6 +149,9 @@
         // Итог в рублях: (сумма USD * курс) + утильсбор + документы РФ
         const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
         
+        // Наценка = Итого из основного приложения - Результат калькулятора
+        const markup = mainTotal - totalRUB;
+        
         const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
         const ourPriceSpan = calcPanel.querySelector('#calc-our-price');
         const tpoSpan = calcPanel.querySelector('#calc-tpo');
@@ -158,6 +162,7 @@
         const koreaSpan = calcPanel.querySelector('#calc-korea-value');
         const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
         const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
+        const markupSpan = calcPanel.querySelector('#calc-markup');
         
         if (priceUsdSpan) priceUsdSpan.textContent = `${Math.round(carPriceUSD).toLocaleString()} $`;
         if (ourPriceSpan) ourPriceSpan.textContent = `${Math.round(ourPrice).toLocaleString()} $`;
@@ -169,8 +174,10 @@
         if (koreaSpan) koreaSpan.textContent = `${calcKoreaExpenses.toLocaleString()} $`;
         if (bishkekSpan) bishkekSpan.textContent = `${calcBishkekExpenses.toLocaleString()} $`;
         if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
-        
-        console.log('[Calc] Обновлено:', { carPriceUSD, ourPrice, totalUSD, calcRate, utilizationFee, calcDocsRf, totalRUB });
+        if (markupSpan) {
+            markupSpan.textContent = `${Math.round(markup).toLocaleString()} ₽`;
+            markupSpan.style.color = markup > 0 ? '#22c55e' : (markup < 0 ? '#ef4444' : '#fbbf24');
+        }
     }
     
     // Редактирование расходов калькулятора
@@ -405,7 +412,7 @@
         }
     }
     
-    // Создание панели калькулятора слева (свёрнута по умолчанию)
+    // Создание панели калькулятора слева
     function createCalcPanel() {
         if (calcPanel) return;
         loadCalcExpenses();
@@ -436,7 +443,7 @@
         calcPanel.innerHTML = `
             <div id="calc-drag-handle" style="cursor: move; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(251,191,36,0.3);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">🧮 Калькулятор цены</span>
+                    <span style="font-size: 16px; font-weight: 700; color: #fbbf24;">⚙️ Админ</span>
                     <div id="calc-collapse-btn" class="calc-collapse-btn">+</div>
                 </div>
             </div>
@@ -479,16 +486,20 @@
                             <span style="color: #94a3b8; font-size: 12px;">📄 Документы РФ:</span>
                             <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600; cursor: pointer;">—</span>
                         </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding-top: 4px; border-top: 1px solid #334155;">
+                            <span style="color: #94a3b8; font-size: 12px;">💰 ИТОГО В ₽ (расчёт):</span>
+                            <span id="calc-total-rub" style="color: #22c55e; font-weight: 800; font-size: 15px;">—</span>
+                        </div>
                         <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 2px solid #fbbf24;">
-                            <span style="color: #94a3b8; font-size: 14px; font-weight: 700;">💰 ИТОГО В ₽:</span>
-                            <span id="calc-total-rub" style="color: #fbbf24; font-size: 18px; font-weight: 800;">—</span>
+                            <span style="color: #94a3b8; font-size: 14px; font-weight: 700;">💰 НАЦЕНКА:</span>
+                            <span id="calc-markup" style="color: #fbbf24; font-size: 18px; font-weight: 800;">—</span>
                         </div>
                     </div>
                 </div>
             </div>
             <div id="calc-collapsed-content" style="display: block;">
                 <div style="text-align: center;">
-                    <span style="color: #fbbf24; font-size: 14px; font-weight: 700;">🧮 Калькулятор</span>
+                    <span style="color: #fbbf24; font-size: 14px; font-weight: 700;">⚙️ Админ</span>
                 </div>
             </div>
         `;
@@ -542,7 +553,7 @@
         const calcCollapseBtn = document.getElementById('calc-collapse-btn');
         const calcFullContent = document.getElementById('calc-full-content');
         const calcCollapsedContent = document.getElementById('calc-collapsed-content');
-        let isCalcCollapsed = true; // По умолчанию свёрнут
+        let isCalcCollapsed = true;
         
         if (calcCollapseBtn && calcFullContent && calcCollapsedContent) {
             calcCollapseBtn.addEventListener('click', (e) => {
@@ -784,5 +795,5 @@
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v24.0 (калькулятор слева, свёрнут)');
+    console.log('[UI] Панель загружена v25.0 (Админ, свёрнут)');
 })();
