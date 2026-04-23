@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Car Data Module FIXED
 // @namespace    http://tampermonkey.net/
-// @version      3.0
-// @description  Улучшенный сбор данных с Encar + страховые выплаты
+// @version      3.1
+// @description  Улучшенный сбор данных с Encar + страховые выплаты + перевод моделей
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -42,7 +42,60 @@
         return koreanBrand.toUpperCase();
     }
 
-    // ========== МАРКА И МОДЕЛЬ ==========
+    // ========== ПЕРЕВОД МОДЕЛЕЙ (ДОБАВЛЕНО) ==========
+    const MODEL_TRANSLATIONS = {
+        // Mercedes-Benz
+        'E클래스': 'E-Class', 'E-лайз': 'E-Class', '이클래스': 'E-Class',
+        'S클래스': 'S-Class', 's클래스': 'S-Class',
+        'C클래스': 'C-Class', 'c클래스': 'C-Class',
+        'GLE': 'GLE', 'GLS': 'GLS', 'G-Class': 'G-Class', 'G클래스': 'G-Class',
+        'CLS': 'CLS', 'CLA': 'CLA', 'AMG': 'AMG',
+        // BMW
+        'X5': 'X5', 'X6': 'X6', 'X3': 'X3', 'X7': 'X7',
+        '5시리즈': '5 Series', '5 Series': '5 Series',
+        '7시리즈': '7 Series', '7 Series': '7 Series',
+        '3시리즈': '3 Series', '3 Series': '3 Series',
+        // Hyundai
+        '싼타페': 'SANTA FE', 'SANTA FE': 'SANTA FE',
+        '투싼': 'TUCSON', 'TUCSON': 'TUCSON',
+        '아반떼': 'AVANTE', 'AVANTE': 'AVANTE',
+        '그랜저': 'GRANDEUR', 'GRANDEUR': 'GRANDEUR',
+        // Kia
+        '쏘렌토': 'SORENTO', 'SORENTO': 'SORENTO',
+        '카니발': 'CARNIVAL', 'CARNIVAL': 'CARNIVAL',
+        '스포티지': 'SPORTAGE', 'SPORTAGE': 'SPORTAGE',
+        '셀토스': 'SELTOS', 'SELTOS': 'SELTOS',
+        // Audi
+        'A4': 'A4', 'A6': 'A6', 'A8': 'A8', 'Q5': 'Q5', 'Q7': 'Q7', 'Q8': 'Q8',
+    };
+
+    function translateModel(koreanModel) {
+        if (!koreanModel) return null;
+        
+        // Проверяем по словарю
+        for (const [kr, en] of Object.entries(MODEL_TRANSLATIONS)) {
+            if (koreanModel.toLowerCase().includes(kr.toLowerCase())) {
+                console.log(`[CarData] Перевод модели: ${koreanModel} -> ${en}`);
+                return en;
+            }
+        }
+        
+        // Удаляем корейские суффиксы и лишние символы
+        let cleaned = koreanModel
+            .replace(/\s*\([^)]*\)\s*/g, ' ')
+            .replace(/년형|년식?/g, '')
+            .replace(/[가-힣]+$/g, '')
+            .replace(/G[0-9]+|F[0-9]+/g, '')
+            .trim();
+        
+        if (/^[A-Za-z0-9\s-]+$/.test(cleaned) && cleaned.length > 0) {
+            return cleaned;
+        }
+        
+        return cleaned || koreanModel;
+    }
+
+    // ========== МАРКА И МОДЕЛЬ (С ПЕРЕВОДОМ) ==========
     function getCarBrandAndModel() {
         let brand = null, model = null;
 
@@ -54,6 +107,8 @@
                     brand = cat.manufacturerEnglishName || cat.manufacturerName;
                     model = cat.modelEnglishName || cat.modelName;
                     if (brand && model) {
+                        if (brand && !/^[A-Z]+$/.test(brand)) brand = translateBrand(brand);
+                        if (model) model = translateModel(model);
                         console.log(`[CarData] Способ 1: ${brand} ${model}`);
                         return { brand, model };
                     }
@@ -85,7 +140,10 @@
         }
 
         if (brand && !/^[A-Z]+$/.test(brand)) brand = translateBrand(brand);
-        if (model) model = model.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+        if (model) {
+            model = translateModel(model);
+            model = model.replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+        }
 
         return (brand || model) ? { brand, model } : null;
     }
@@ -377,7 +435,7 @@
         return null;
     }
 
-    // ========== СТРАХОВЫЕ ВЫПЛАТЫ (ДОБАВЛЕННЫЙ БЛОК) ==========
+    // ========== СТРАХОВЫЕ ВЫПЛАТЫ ==========
     function getVehicleNumber(carId, callback) {
         const body = document.body.innerText;
         let match = body.match(/차량번호\s*:?\s*([가-힣0-9]+)/);
@@ -459,7 +517,6 @@
             accidentDetailsDiv.innerHTML = '<div>Нет страховых случаев</div>';
         }
         
-        // Сохраняем в Hub для UI
         Hub.set('accidentTotal', formatAccidentTotal(accidentInfo));
         Hub.set('accidentDetails', accidentInfo?.details || []);
         Hub.emit('accidentData:loaded', accidentInfo);
@@ -534,7 +591,6 @@
 
         Hub.emit('carData:ready', Hub.getAll());
         
-        // ЗАГРУЖАЕМ СТРАХОВЫЕ ВЫПЛАТЫ
         loadAccidentData();
     }
 
@@ -572,5 +628,5 @@
     loadSavedPower();
     setTimeout(() => collectAllCarData(), 500);
 
-    console.log('[CarData] Модуль загружен v3.0 (со страховыми выплатами)');
+    console.log('[CarData] Модуль загружен v3.1 (с переводом моделей)');
 })();
