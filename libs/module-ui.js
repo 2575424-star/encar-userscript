@@ -143,7 +143,7 @@
         const ourPrice = carPriceUSD * 0.96;
         const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses;
         const calcRate = currentUsdtRate - 1;
-        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf + calcOurServices;
+        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
         const markup = mainTotal - totalRUB;
         
         const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
