@@ -430,7 +430,7 @@
         calcPanel.innerHTML = `
             <div id="calc-drag-handle" style="cursor: move; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(251,191,36,0.3);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 13px; font-weight: 700; color: #fbbf24;">⚙️ Админ</span>
+                    <span style="font-size: 13px; font-weight: 700; color: #fbbf24;">Панель</span>
                     <div id="calc-collapse-btn" class="calc-collapse-btn">+</div>
                 </div>
             </div>
@@ -486,7 +486,7 @@
             </div>
             <div id="calc-collapsed-content" style="display: block;">
                 <div style="text-align: center;">
-                    <span style="color: #fbbf24; font-size: 11px; font-weight: 700;">⚙️ Админ</span>
+                    <span style="color: #fbbf24; font-size: 11px; font-weight: 700;"></span>
                 </div>
             </div>
         `;
