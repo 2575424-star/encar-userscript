@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      27.0
-// @description  Финальная версия панели с калькулятором слева
+// @version      28.0
+// @description  Финальная версия панели с калькулятором и услугами
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -30,6 +30,7 @@
     let calcKoreaExpenses = 4000;
     let calcBishkekExpenses = 1600;
     let calcDocsRf = 85000;
+    let calcOurServices = 300000;  // Наши услуги для калькулятора
     
     function loadCalcExpenses() {
         const saved = localStorage.getItem('encar_calc_expenses');
@@ -39,6 +40,7 @@
                 calcKoreaExpenses = settings.koreaExpenses || 4000;
                 calcBishkekExpenses = settings.bishkekExpenses || 1600;
                 calcDocsRf = settings.docsRf || 85000;
+                calcOurServices = settings.ourServices || 300000;
             } catch(e) {}
         }
     }
@@ -47,7 +49,8 @@
         localStorage.setItem('encar_calc_expenses', JSON.stringify({
             koreaExpenses: calcKoreaExpenses,
             bishkekExpenses: calcBishkekExpenses,
-            docsRf: calcDocsRf
+            docsRf: calcDocsRf,
+            ourServices: calcOurServices
         }));
     }
     
@@ -67,6 +70,7 @@
     let rfUnloading = 3000;
     let rfPreparation = 3000;
     let rfDocuments = 85000;
+    let ourServices = 300000;
     
     function loadDetailedSettings() {
         const saved = localStorage.getItem('encar_detailed_settings');
@@ -86,6 +90,7 @@
                 rfUnloading = settings.rfUnloading || 3000;
                 rfPreparation = settings.rfPreparation || 3000;
                 rfDocuments = settings.rfDocuments || 85000;
+                ourServices = settings.ourServices || 300000;
             } catch(e) {}
         }
     }
@@ -95,7 +100,7 @@
             koreaInspection, koreaDealerCommission, koreaDelivery, koreaEvacuator,
             koreaExportFeePercent, koreaExportFeeMin, koreaFreight,
             bishkekUnloading, bishkekBroker, bishkekDelivery,
-            rfUnloading, rfPreparation, rfDocuments
+            rfUnloading, rfPreparation, rfDocuments, ourServices
         }));
     }
     
@@ -114,13 +119,14 @@
     }
     
     function calculateTotalRFRUB() {
-        return rfUnloading + rfPreparation + rfDocuments;
+        return rfUnloading + rfPreparation + rfDocuments + ourServices;
     }
     
     function updateGlobalExpenses() {
         Hub.set('koreaLogistics', calculateTotalKoreaUSD());
         Hub.set('servicesBishkek', calculateTotalBishkekUSD());
         Hub.set('docsRf', calculateTotalRFRUB());
+        Hub.set('ourServices', ourServices);
         Hub.emit('any:changed', {});
         updateCalcPanel();
     }
@@ -137,7 +143,7 @@
         const ourPrice = carPriceUSD * 0.96;
         const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses;
         const calcRate = currentUsdtRate - 1;
-        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
+        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf + calcOurServices;
         const markup = mainTotal - totalRUB;
         
         const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
@@ -147,6 +153,7 @@
         const usdtRateSpan = calcPanel.querySelector('#calc-usdt-rate');
         const utilSpan = calcPanel.querySelector('#calc-util');
         const docsSpan = calcPanel.querySelector('#calc-docs-value');
+        const servicesSpan = calcPanel.querySelector('#calc-services-value');
         const koreaSpan = calcPanel.querySelector('#calc-korea-value');
         const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
         const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
@@ -159,6 +166,7 @@
         if (usdtRateSpan) usdtRateSpan.textContent = `${currentUsdtRate.toFixed(2)} ₽ (x${calcRate.toFixed(2)})`;
         if (utilSpan) utilSpan.textContent = `${Math.round(utilizationFee).toLocaleString()} ₽`;
         if (docsSpan) docsSpan.textContent = `${Math.round(calcDocsRf).toLocaleString()} ₽`;
+        if (servicesSpan) servicesSpan.textContent = `${Math.round(calcOurServices).toLocaleString()} ₽`;
         if (koreaSpan) koreaSpan.textContent = `${calcKoreaExpenses.toLocaleString()} $`;
         if (bishkekSpan) bishkekSpan.textContent = `${calcBishkekExpenses.toLocaleString()} $`;
         if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
@@ -183,6 +191,10 @@
                 currentValue = calcDocsRf;
                 promptText = 'Документы РФ (₽):';
                 break;
+            case 'services':
+                currentValue = calcOurServices;
+                promptText = 'Наши услуги (₽):';
+                break;
             default: return;
         }
         const newValue = prompt(promptText, currentValue);
@@ -191,6 +203,7 @@
             if (type === 'korea') calcKoreaExpenses = numValue;
             if (type === 'bishkek') calcBishkekExpenses = numValue;
             if (type === 'docs') calcDocsRf = numValue;
+            if (type === 'services') calcOurServices = numValue;
             saveCalcExpenses();
             updateCalcPanel();
         }
@@ -277,6 +290,9 @@
         const totalRFSpan = mainPanel.querySelector('#total-rf');
         if (totalRFSpan) totalRFSpan.textContent = `${formatNumber(calculateTotalRFRUB())} ₽`;
         
+        const ourSpanMain = mainPanel.querySelector('#our-value');
+        if (ourSpanMain) ourSpanMain.textContent = `${formatNumber(ourServices)} ₽`;
+        
         const euroPrice = Hub.get('selectedEuroPrice');
         const priceEuroSpan = mainPanel.querySelector('#price-euro');
         if (priceEuroSpan) priceEuroSpan.textContent = euroPrice ? `${formatNumber(euroPrice)} €` : '—';
@@ -350,7 +366,8 @@
                 <div class="expense-row"><span class="expense-label">🔄 Разгрузка авто:</span><span class="expense-value" data-expense="rfUnloading">${formatNumber(rfUnloading)} ₽</span></div>
                 <div class="expense-row"><span class="expense-label">🔧 Подготовка к выдаче:</span><span class="expense-value" data-expense="rfPreparation">${formatNumber(rfPreparation)} ₽</span></div>
                 <div class="expense-row"><span class="expense-label">📄 Оформление документов:</span><span class="expense-value" data-expense="rfDocuments">${formatNumber(rfDocuments)} ₽</span></div>
-                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО РФ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(calculateTotalRFRUB())} ₽</span></div>
+                <div class="expense-row"><span class="expense-label">🤝 Наши услуги:</span><span class="expense-value" data-expense="ourServices">${formatNumber(ourServices)} ₽</span></div>
+                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО РФ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(rfUnloading + rfPreparation + rfDocuments + ourServices)} ₽</span></div>
             `;
         }
         
@@ -374,6 +391,7 @@
             case 'rfUnloading': currentValue = rfUnloading; promptText = 'Разгрузка авто (₽):'; break;
             case 'rfPreparation': currentValue = rfPreparation; promptText = 'Подготовка к выдаче (₽):'; break;
             case 'rfDocuments': currentValue = rfDocuments; promptText = 'Оформление документов (₽):'; break;
+            case 'ourServices': currentValue = ourServices; promptText = 'Наши услуги (₽):'; break;
             default: return;
         }
         const newValue = prompt(promptText, currentValue);
@@ -391,6 +409,7 @@
                 case 'rfUnloading': rfUnloading = numValue; break;
                 case 'rfPreparation': rfPreparation = numValue; break;
                 case 'rfDocuments': rfDocuments = numValue; break;
+                case 'ourServices': ourServices = numValue; break;
             }
             saveDetailedSettings();
             updateDetailedExpenses();
@@ -399,7 +418,6 @@
         }
     }
     
-    // Создание панели калькулятора (уменьшенная, ширина 180px)
     function createCalcPanel() {
         if (calcPanel) return;
         loadCalcExpenses();
@@ -430,7 +448,7 @@
         calcPanel.innerHTML = `
             <div id="calc-drag-handle" style="cursor: move; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(251,191,36,0.3);">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <span style="font-size: 13px; font-weight: 700; color: #fbbf24;">Панель</span>
+                    <span style="font-size: 13px; font-weight: 700; color: #fbbf24;">⚙️ Админ</span>
                     <div id="calc-collapse-btn" class="calc-collapse-btn">+</div>
                 </div>
             </div>
@@ -473,6 +491,10 @@
                             <span style="color: #94a3b8; font-size: 10px;">📄 Документы:</span>
                             <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
                         </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span style="color: #94a3b8; font-size: 10px;">🤝 Наши услуги:</span>
+                            <span id="calc-services-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
+                        </div>
                         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; border-top: 1px solid #334155;">
                             <span style="color: #94a3b8; font-size: 10px;">💰 ИТОГО:</span>
                             <span id="calc-total-rub" style="color: #22c55e; font-weight: 800; font-size: 12px;">—</span>
@@ -486,23 +508,23 @@
             </div>
             <div id="calc-collapsed-content" style="display: block;">
                 <div style="text-align: center;">
-                    <span style="color: #fbbf24; font-size: 11px; font-weight: 700;"></span>
+                    <span style="color: #fbbf24; font-size: 11px; font-weight: 700;">⚙️ Админ</span>
                 </div>
             </div>
         `;
         
         document.body.appendChild(calcPanel);
         
-        // Добавляем обработчики кликов для редактирования
         const koreaSpan = calcPanel.querySelector('#calc-korea-value');
         const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
         const docsSpan = calcPanel.querySelector('#calc-docs-value');
+        const servicesSpan = calcPanel.querySelector('#calc-services-value');
         
         if (koreaSpan) koreaSpan.onclick = () => editCalcExpense('korea');
         if (bishkekSpan) bishkekSpan.onclick = () => editCalcExpense('bishkek');
         if (docsSpan) docsSpan.onclick = () => editCalcExpense('docs');
+        if (servicesSpan) servicesSpan.onclick = () => editCalcExpense('services');
         
-        // Drag & Drop для калькулятора
         const calcDragHandle = document.getElementById('calc-drag-handle');
         if (calcDragHandle) {
             calcDragHandle.addEventListener('mousedown', (e) => {
@@ -536,7 +558,6 @@
             }
         });
         
-        // Сворачивание калькулятора (по умолчанию свёрнут)
         const calcCollapseBtn = document.getElementById('calc-collapse-btn');
         const calcFullContent = document.getElementById('calc-full-content');
         const calcCollapsedContent = document.getElementById('calc-collapsed-content');
@@ -566,7 +587,6 @@
         updateCalcPanel();
     }
     
-    // Создание основной панели
     function createPanel() {
         if (mainPanel) return;
         loadDetailedSettings();
@@ -633,6 +653,12 @@
                         <div style="display:flex;align-items:center;gap:8px;"><span id="total-rf" style="color:#fbbf24;font-weight:700;font-size:15px;">—</span><span id="rf-arrow" style="font-size:12px;color:#94a3b8;">▼</span></div>
                     </div>
                     <div id="rf-content" style="display:none;margin-top:6px;"><div id="rf-details-inner" class="expense-content"></div></div>
+                </div>
+                
+                <!-- Наши услуги (отдельный блок) -->
+                <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:14px;font-weight:500;">🤝 Наши услуги:</span>
+                    <span id="our-value" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;cursor:pointer;">300 000 ₽</span>
                 </div>
                 
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;">
@@ -751,6 +777,22 @@
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
+        // Наши услуги
+        const ourSpanMain = document.getElementById('our-value');
+        if (ourSpanMain) {
+            ourSpanMain.onclick = () => {
+                const val = prompt('Наши услуги (₽):', ourServices);
+                if (val && !isNaN(parseFloat(val))) {
+                    ourServices = parseFloat(val);
+                    saveDetailedSettings();
+                    updateDetailedExpenses();
+                    updateGlobalExpenses();
+                    updateCalcPanel();
+                    updatePanel();
+                }
+            };
+        }
+        
         document.getElementById('tpo-value').onclick = () => { const current = Hub.get('manualTpo') || Hub.get('calculatedTpo') || ''; const val = prompt('ТПО в USD (оставьте пустым для авто):', current); if (val === '') Hub.set('manualTpo', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualTpo', parseFloat(val)); updateCalcPanel(); };
         document.getElementById('util-value').onclick = () => { const current = Hub.get('manualUtilizationFee') || Hub.get('utilizationFee') || ''; const val = prompt('Утильсбор в ₽ (оставьте пустым для авто):', current); if (val === '') Hub.set('manualUtilizationFee', null); else if (val && !isNaN(parseFloat(val))) Hub.set('manualUtilizationFee', parseFloat(val)); updateCalcPanel(); };
         
@@ -763,7 +805,6 @@
             priceSpan.onclick = (e) => { e.stopPropagation(); const current = Hub.get('selectedEuroPrice') || ''; const val = prompt('Введите таможенную стоимость в EUR (оставьте пустым для авто-выбора):', current); if (val !== null && !isNaN(parseFloat(val))) { localStorage.setItem('encar_custom_euro_price', parseFloat(val)); Hub.set('selectedEuroPrice', parseFloat(val)); updatePanel(); } else if (val === '') { localStorage.removeItem('encar_custom_euro_price'); updatePanel(); } };
         }
         
-        // Кнопка печати
         document.getElementById('print-report-btn').onclick = () => { if (unsafeWindow.EncarPhotos?.print) unsafeWindow.EncarPhotos.print(); else alert('Модуль фото не загружен'); };
         
         updateDetailedExpenses();
@@ -781,5 +822,5 @@
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v27.0 (Админ уменьшен)');
+    console.log('[UI] Панель загружена v28.0 (с услугами)');
 })();
