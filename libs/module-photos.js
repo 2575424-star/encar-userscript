@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Photos Module (Pro)
 // @namespace    http://tampermonkey.net/
-// @version      7.3
-// @description  Профессиональное КП с настройками (исправлена ошибка settings is not defined)
+// @version      7.4
+// @description  Профессиональное КП с настройками (исправлено)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        GM_xmlhttpRequest
@@ -41,7 +41,6 @@
         
         let photosList = [];
         
-        // Настройки компании
         let companySettings = {
             companyName: 'ООО "ИнДрайв"',
             inn: '3662313297',
@@ -57,7 +56,6 @@
             customModel: ''
         };
         
-        // Детальные расходы
         let koreaInspection = 150000;
         let koreaDealerCommission = 440000;
         let koreaDelivery = 250000;
@@ -104,10 +102,6 @@
                     companySettings = { ...companySettings, ...settings };
                 } catch(e) {}
             }
-        }
-        
-        function saveCompanySettings(settings) {
-            localStorage.setItem('encar_company_settings', JSON.stringify(settings));
         }
         
         function calculateExportFee() {
@@ -211,7 +205,6 @@
                 loadingDiv.remove();
             }
             
-            // Определяем марку и модель
             let brand = companySettings.customBrand && companySettings.customBrand.trim() !== '' 
                 ? companySettings.customBrand 
                 : (Hub.get('carBrand') || '—');
@@ -249,8 +242,8 @@
             
             const exportFee = calculateExportFee();
             
-            // Подготовим настройки для вставки в скрипт
-            const settingsStr = JSON.stringify(companySettings);
+            // Подготовим настройки как JSON строку для вставки в скрипт
+            const settingsJson = JSON.stringify(companySettings);
             
             const reportHtml = `<!DOCTYPE html>
 <html>
@@ -260,7 +253,7 @@
     <title>Коммерческое предложение | ${brand} ${model}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: #e8edf2; padding: 20px; }
+        body { font-family: 'Inter', 'Segoe UI', sans-serif; background: #e8edf2; padding: 20px; }
         .toolbar { position: fixed; bottom: 30px; right: 30px; z-index: 1000; display: flex; gap: 12px; }
         .toolbar button { padding: 12px 28px; font-size: 14px; font-weight: 600; border: none; border-radius: 50px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
         .toolbar button:hover { transform: translateY(-2px); }
@@ -269,16 +262,16 @@
         .btn-settings { background: #475569; color: white; }
         .proposal { max-width: 1100px; margin: 0 auto; }
         .page { background: white; border-radius: 24px; margin-bottom: 30px; box-shadow: 0 20px 40px -12px rgba(0,0,0,0.2); overflow: hidden; page-break-after: always; }
-        @media print { .toolbar { display: none; } body { background: white; padding: 0; margin: 0; } .page { box-shadow: none; margin: 0; border-radius: 0; page-break-after: always; } .header, .total-row { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        @media print { .toolbar { display: none; } body { background: white; padding: 0; } .page { box-shadow: none; margin: 0; border-radius: 0; } .header, .total-row { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         .header { background: linear-gradient(135deg, #0f2a44 0%, #1a4a6f 100%); padding: 18px 30px; color: white; }
         .logo-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
         .logo-area img { height: 40px; max-width: 180px; object-fit: contain; }
         .company-info { text-align: right; font-size: 11px; line-height: 1.4; font-weight: 500; }
         .title-block { display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 14px; flex-wrap: wrap; gap: 12px; }
-        .car-title { font-size: 24px; font-weight: 800; letter-spacing: -0.3px; }
+        .car-title { font-size: 24px; font-weight: 800; }
         .manager-info { text-align: right; font-size: 11px; }
         .manager-name { font-weight: 700; margin-bottom: 3px; font-size: 13px; }
-        .validity { font-size: 10px; opacity: 0.8; margin-top: 8px; font-weight: 500; }
+        .validity { font-size: 10px; opacity: 0.8; margin-top: 8px; }
         .section { padding: 20px 30px; border-bottom: 1px solid #eef2f6; }
         .section-title { font-size: 18px; font-weight: 800; color: #1e3a5f; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
         .section-icon { font-size: 22px; }
@@ -306,7 +299,7 @@
         .requisites { display: flex; justify-content: space-between; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 9px; gap: 10px; }
         .loading-spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2); border-top-color: #fbbf24; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) { body { padding: 10px; } .section { padding: 15px 20px; } .photos-grid { grid-template-columns: repeat(2, 1fr); } .info-grid { grid-template-columns: 1fr; } .title-block { flex-direction: column; align-items: flex-start; } .manager-info { text-align: left; } }
+        @media (max-width: 768px) { .section { padding: 15px 20px; } .photos-grid { grid-template-columns: repeat(2, 1fr); } .info-grid { grid-template-columns: 1fr; } .title-block { flex-direction: column; align-items: flex-start; } .manager-info { text-align: left; } }
     </style>
 </head>
 <body>
@@ -346,7 +339,7 @@
                 <div class="info-row"><span class="info-label">🔧 Двигатель</span><span class="info-value">${engineVolume ? (engineVolume/1000).toFixed(1) + 'L' : '—'}</span></div>
                 <div class="info-row"><span class="info-label">⚡ Мощность</span><span class="info-value">${power ? `${power} л.с.` : '—'}</span></div>
                 <div class="info-row"><span class="info-label">📊 Пробег</span><span class="info-value">${mileage ? `${mileage.toLocaleString()} km` : '—'}</span></div>
-                <div class="info-row"><span class="info-label">🔢 VIN номер</span><span class="info-value" style="font-family:monospace;">${vin === '—' || !vin ? '—' : vin}</span></div>
+                <div class="info-row"><span class="info-label">🔢 VIN номер</span><span class="info-value">${vin === '—' || !vin ? '—' : vin}</span></div>
                 <div class="info-row"><span class="info-label">👁️ Просмотры</span><span class="info-value">${views?.toLocaleString() || '—'}</span></div>
                 <div class="info-row"><span class="info-label">💸 Страховые выплаты</span><span class="info-value" style="color:#fbbf24;">${accidentTotal}</span></div>
             </div>
@@ -437,15 +430,15 @@
 </div>
 
 <script>
-    // Диалог настроек
+    const defaultSettings = ${settingsJson};
+    
     function showSettingsDialog() {
-        // Загружаем текущие настройки из localStorage
-        let currentSettings = ${settingsStr};
+        let currentSettings = defaultSettings;
         const saved = localStorage.getItem('encar_company_settings');
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
-                currentSettings = { ...currentSettings, ...parsed };
+                currentSettings = { ...defaultSettings, ...parsed };
             } catch(e) {}
         }
         
@@ -507,6 +500,6 @@
             showSettings: () => {}
         };
         
-        console.log('[Photos] Модуль загружен v7.3 (исправлена ошибка настроек)');
+        console.log('[Photos] Модуль загружен v7.4');
     });
 })();
