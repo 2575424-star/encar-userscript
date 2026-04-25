@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      28.5
-// @description  Финальная версия панели (Наши услуги только в основной панели, убраны из админки)
+// @version      28.6
+// @description  Финальная версия панели с автоматическим обновлением расходов Корея
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -124,10 +124,17 @@
             }));
         }
         
+        // ========== РАСЧЁТЫ ==========
+        function calculateExportFee() {
+            const carPriceKrw = Hub.get('carPriceKrw') || 0;
+            let exportFee = carPriceKrw * koreaExportFeePercent / 100;
+            if (exportFee < koreaExportFeeMin) exportFee = koreaExportFeeMin;
+            return exportFee;
+        }
+        
         function calculateTotalKoreaUSD() {
             const usdToKrw = Hub.get('usdToKrw') || 1473;
-            let exportFee = (Hub.get('carPriceKrw') || 0) * koreaExportFeePercent / 100;
-            if (exportFee < koreaExportFeeMin) exportFee = koreaExportFeeMin;
+            const exportFee = calculateExportFee();
             const totalKrw = koreaInspection + koreaDealerCommission + koreaDelivery + 
                              koreaEvacuator + exportFee + koreaFreight;
             return Math.round(totalKrw / usdToKrw);
@@ -142,9 +149,13 @@
         }
         
         function updateGlobalExpenses() {
-            Hub.set('koreaLogistics', calculateTotalKoreaUSD());
-            Hub.set('servicesBishkek', calculateTotalBishkekUSD());
-            Hub.set('docsRf', calculateTotalRFRUB());
+            const koreaUSD = calculateTotalKoreaUSD();
+            const bishkekUSD = calculateTotalBishkekUSD();
+            const rfRUB = calculateTotalRFRUB();
+            
+            Hub.set('koreaLogistics', koreaUSD);
+            Hub.set('servicesBishkek', bishkekUSD);
+            Hub.set('docsRf', rfRUB);
             Hub.emit('any:changed', {});
             updateCalcPanel();
         }
@@ -301,14 +312,19 @@
                 priceValueSpan.innerHTML = `${carPriceKrw ? formatNumber(carPriceKrw) + ' ₩' : '—'} / ${priceUsd ? formatNumber(priceUsd) + ' $' : '—'}`;
             }
             
+            // Пересчитываем koreaLogistics на случай, если carPriceKrw изменился
+            const koreaUSD = calculateTotalKoreaUSD();
+            const bishkekUSD = calculateTotalBishkekUSD();
+            const rfRUB = calculateTotalRFRUB();
+            
             const totalKoreaSpan = mainPanel.querySelector('#total-korea');
-            if (totalKoreaSpan) totalKoreaSpan.textContent = `${formatNumber(calculateTotalKoreaUSD())} $`;
+            if (totalKoreaSpan) totalKoreaSpan.textContent = `${formatNumber(koreaUSD)} $`;
             
             const totalBishkekSpan = mainPanel.querySelector('#total-bishkek');
-            if (totalBishkekSpan) totalBishkekSpan.textContent = `${formatNumber(calculateTotalBishkekUSD())} $`;
+            if (totalBishkekSpan) totalBishkekSpan.textContent = `${formatNumber(bishkekUSD)} $`;
             
             const totalRFSpan = mainPanel.querySelector('#total-rf');
-            if (totalRFSpan) totalRFSpan.textContent = `${formatNumber(calculateTotalRFRUB())} ₽`;
+            if (totalRFSpan) totalRFSpan.textContent = `${formatNumber(rfRUB)} ₽`;
             
             const ourSpanMain = mainPanel.querySelector('#our-value');
             if (ourSpanMain) ourSpanMain.textContent = `${formatNumber(ourServices)} ₽`;
@@ -348,6 +364,11 @@
             const usdtHeader = mainPanel.querySelector('#usdt-header');
             if (usdtHeader) usdtHeader.textContent = `💎 ${usdtRate.toFixed(2)}`;
             
+            // Обновляем значения в Hub, если они изменились
+            Hub.set('koreaLogistics', koreaUSD, true);
+            Hub.set('servicesBishkek', bishkekUSD, true);
+            Hub.set('docsRf', rfRUB, true);
+            
             updateCalcPanel();
         }
         
@@ -356,9 +377,7 @@
             const bishkekDetailsDiv = document.getElementById('bishkek-details-inner');
             const rfDetailsDiv = document.getElementById('rf-details-inner');
             const usdToKrw = Hub.get('usdToKrw') || 1473;
-            const carPriceKrw = Hub.get('carPriceKrw') || 0;
-            let exportFee = carPriceKrw * koreaExportFeePercent / 100;
-            if (exportFee < koreaExportFeeMin) exportFee = koreaExportFeeMin;
+            const exportFee = calculateExportFee();
             
             if (koreaDetailsDiv) {
                 koreaDetailsDiv.innerHTML = `
@@ -779,7 +798,7 @@
             document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
             document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
             
-            // Наши услуги (отдельный блок) - только в основной панели
+            // Наши услуги (отдельный блок)
             const ourSpanMain = document.getElementById('our-value');
             if (ourSpanMain) {
                 ourSpanMain.onclick = () => {
@@ -817,7 +836,20 @@
             createCalcPanel();
             updateCalcPanel();
             
-            setInterval(() => { updatePanel(); updateCalcPanel(); }, 5000);
+            // Подписка на изменение цены авто для обновления расходов Корея
+            Hub.on('carPriceKrw:changed', () => {
+                updateDetailedExpenses();
+                updateGlobalExpenses();
+                updatePanel();
+            });
+            
+            // Периодическое обновление (как резерв)
+            setInterval(() => { 
+                updateDetailedExpenses();
+                updateGlobalExpenses();
+                updatePanel(); 
+                updateCalcPanel(); 
+            }, 5000);
         }
         
         Hub.on('any:changed', () => { updatePanel(); updateCalcPanel(); });
@@ -825,6 +857,6 @@
         Hub.on('accidentData:loaded', () => updatePanel());
         
         createPanel();
-        console.log('[UI] Панель загружена v28.5 (Наши услуги только в основной панели)');
+        console.log('[UI] Панель загружена v28.6 (автоматическое обновление расходов Корея)');
     });
 })();
