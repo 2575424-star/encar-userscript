@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      28.0
-// @description  Финальная версия панели с калькулятором и услугами
+// @version      28.1
+// @description  Финальная версия панели с калькулятором и услугами (Наши услуги только в основном меню)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -119,14 +119,15 @@
     }
     
     function calculateTotalRFRUB() {
-        return rfUnloading + rfPreparation + rfDocuments + ourServices;
+        // НАШИ УСЛУГИ УДАЛЕНЫ ИЗ РАСХОДОВ РФ
+        return rfUnloading + rfPreparation + rfDocuments;
     }
     
     function updateGlobalExpenses() {
         Hub.set('koreaLogistics', calculateTotalKoreaUSD());
         Hub.set('servicesBishkek', calculateTotalBishkekUSD());
         Hub.set('docsRf', calculateTotalRFRUB());
-        Hub.set('ourServices', ourServices);
+        // Hub.set('ourServices', ourServices); - УДАЛЕНО, дублируется в основном меню
         Hub.emit('any:changed', {});
         updateCalcPanel();
     }
@@ -366,8 +367,8 @@
                 <div class="expense-row"><span class="expense-label">🔄 Разгрузка авто:</span><span class="expense-value" data-expense="rfUnloading">${formatNumber(rfUnloading)} ₽</span></div>
                 <div class="expense-row"><span class="expense-label">🔧 Подготовка к выдаче:</span><span class="expense-value" data-expense="rfPreparation">${formatNumber(rfPreparation)} ₽</span></div>
                 <div class="expense-row"><span class="expense-label">📄 Оформление документов:</span><span class="expense-value" data-expense="rfDocuments">${formatNumber(rfDocuments)} ₽</span></div>
-                <div class="expense-row"><span class="expense-label">🤝 Наши услуги:</span><span class="expense-value" data-expense="ourServices">${formatNumber(ourServices)} ₽</span></div>
-                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО РФ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(rfUnloading + rfPreparation + rfDocuments + ourServices)} ₽</span></div>
+                <!-- СТРОКА С НАШИМИ УСЛУГАМИ УДАЛЕНА -->
+                <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО РФ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(rfUnloading + rfPreparation + rfDocuments)} ₽</span></div>
             `;
         }
         
@@ -391,7 +392,6 @@
             case 'rfUnloading': currentValue = rfUnloading; promptText = 'Разгрузка авто (₽):'; break;
             case 'rfPreparation': currentValue = rfPreparation; promptText = 'Подготовка к выдаче (₽):'; break;
             case 'rfDocuments': currentValue = rfDocuments; promptText = 'Оформление документов (₽):'; break;
-            case 'ourServices': currentValue = ourServices; promptText = 'Наши услуги (₽):'; break;
             default: return;
         }
         const newValue = prompt(promptText, currentValue);
@@ -409,7 +409,6 @@
                 case 'rfUnloading': rfUnloading = numValue; break;
                 case 'rfPreparation': rfPreparation = numValue; break;
                 case 'rfDocuments': rfDocuments = numValue; break;
-                case 'ourServices': ourServices = numValue; break;
             }
             saveDetailedSettings();
             updateDetailedExpenses();
@@ -655,7 +654,7 @@
                     <div id="rf-content" style="display:none;margin-top:6px;"><div id="rf-details-inner" class="expense-content"></div></div>
                 </div>
                 
-                <!-- Наши услуги (отдельный блок) -->
+                <!-- Наши услуги (отдельный блок в основном меню) -->
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:14px;font-weight:500;">🤝 Наши услуги:</span>
                     <span id="our-value" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;cursor:pointer;">300 000 ₽</span>
@@ -777,7 +776,7 @@
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
-        // Наши услуги
+        // Наши услуги (отдельный блок)
         const ourSpanMain = document.getElementById('our-value');
         if (ourSpanMain) {
             ourSpanMain.onclick = () => {
@@ -822,5 +821,5 @@
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v28.0 (с услугами)');
+    console.log('[UI] Панель загружена v28.1 (Наши услуги только в основном меню)');
 })();
