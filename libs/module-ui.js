@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      28.1
-// @description  Финальная версия панели с калькулятором и услугами (Наши услуги только в основном меню)
+// @version      28.2
+// @description  Финальная версия панели с калькулятором и услугами (синхронизация ourServices с Hub)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -30,7 +30,7 @@
     let calcKoreaExpenses = 4000;
     let calcBishkekExpenses = 1600;
     let calcDocsRf = 85000;
-    let calcOurServices = 300000;  // Наши услуги для калькулятора
+    let calcOurServices = 300000;
     
     function loadCalcExpenses() {
         const saved = localStorage.getItem('encar_calc_expenses');
@@ -91,7 +91,12 @@
                 rfPreparation = settings.rfPreparation || 3000;
                 rfDocuments = settings.rfDocuments || 85000;
                 ourServices = settings.ourServices || 300000;
+                // Синхронизируем с Hub
+                Hub.set('ourServices', ourServices, true);
             } catch(e) {}
+        } else {
+            ourServices = 300000;
+            Hub.set('ourServices', ourServices, true);
         }
     }
     
@@ -119,7 +124,7 @@
     }
     
     function calculateTotalRFRUB() {
-        // НАШИ УСЛУГИ УДАЛЕНЫ ИЗ РАСХОДОВ РФ
+        // Наши услуги УДАЛЕНЫ из расходов РФ
         return rfUnloading + rfPreparation + rfDocuments;
     }
     
@@ -127,7 +132,7 @@
         Hub.set('koreaLogistics', calculateTotalKoreaUSD());
         Hub.set('servicesBishkek', calculateTotalBishkekUSD());
         Hub.set('docsRf', calculateTotalRFRUB());
-        // Hub.set('ourServices', ourServices); - УДАЛЕНО, дублируется в основном меню
+        // ourServices уже синхронизирован отдельно, не перезаписываем
         Hub.emit('any:changed', {});
         updateCalcPanel();
     }
@@ -144,7 +149,7 @@
         const ourPrice = carPriceUSD * 0.96;
         const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses;
         const calcRate = currentUsdtRate - 1;
-        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
+        const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf + calcOurServices;
         const markup = mainTotal - totalRUB;
         
         const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
@@ -367,7 +372,6 @@
                 <div class="expense-row"><span class="expense-label">🔄 Разгрузка авто:</span><span class="expense-value" data-expense="rfUnloading">${formatNumber(rfUnloading)} ₽</span></div>
                 <div class="expense-row"><span class="expense-label">🔧 Подготовка к выдаче:</span><span class="expense-value" data-expense="rfPreparation">${formatNumber(rfPreparation)} ₽</span></div>
                 <div class="expense-row"><span class="expense-label">📄 Оформление документов:</span><span class="expense-value" data-expense="rfDocuments">${formatNumber(rfDocuments)} ₽</span></div>
-                <!-- СТРОКА С НАШИМИ УСЛУГАМИ УДАЛЕНА -->
                 <div class="expense-row" style="margin-top:6px; padding-top:6px; border-top:1px solid #334155;"><span class="expense-label" style="font-weight:bold;">💰 ИТОГО РФ:</span><span class="expense-value" style="color:#fbbf24; font-weight:bold;">${formatNumber(rfUnloading + rfPreparation + rfDocuments)} ₽</span></div>
             `;
         }
@@ -387,7 +391,7 @@
             case 'koreaEvacuator': currentValue = koreaEvacuator; promptText = 'Эвакуатор в порт (вон):'; break;
             case 'koreaFreight': currentValue = koreaFreight; promptText = 'Фрахт до Бишкека (вон):'; break;
             case 'bishkekUnloading': currentValue = bishkekUnloading; promptText = 'Разгрузка + эвакуатор ($):'; break;
-            case 'bishkekBroker': currentValue = bishkekBroker; promptText = 'СВХ + брокерские услуги ($):'; break;
+            case 'bishkekBroker': currentValue = bishkekBroker; promptText = 'СВХ + брокер ($):'; break;
             case 'bishkekDelivery': currentValue = bishkekDelivery; promptText = 'Доставка в РФ ($):'; break;
             case 'rfUnloading': currentValue = rfUnloading; promptText = 'Разгрузка авто (₽):'; break;
             case 'rfPreparation': currentValue = rfPreparation; promptText = 'Подготовка к выдаче (₽):'; break;
@@ -654,10 +658,10 @@
                     <div id="rf-content" style="display:none;margin-top:6px;"><div id="rf-details-inner" class="expense-content"></div></div>
                 </div>
                 
-                <!-- Наши услуги (отдельный блок в основном меню) -->
+                <!-- Наши услуги (отдельный блок) -->
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:14px;font-weight:500;">🤝 Наши услуги:</span>
-                    <span id="our-value" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;cursor:pointer;">300 000 ₽</span>
+                    <span id="our-value" class="clickable" style="color:#fbbf24;font-weight:700;font-size:15px;cursor:pointer;">${formatNumber(ourServices)} ₽</span>
                 </div>
                 
                 <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:8px;margin-bottom:8px;">
@@ -776,14 +780,16 @@
         document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
         document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
         
-        // Наши услуги (отдельный блок)
+        // Наши услуги (отдельный блок) - С ИСПРАВЛЕНИЕМ: синхронизация с Hub
         const ourSpanMain = document.getElementById('our-value');
         if (ourSpanMain) {
             ourSpanMain.onclick = () => {
                 const val = prompt('Наши услуги (₽):', ourServices);
-                if (val && !isNaN(parseFloat(val))) {
-                    ourServices = parseFloat(val);
+                if (val !== null && !isNaN(parseFloat(val))) {
+                    const numValue = parseFloat(val);
+                    ourServices = numValue;
                     saveDetailedSettings();
+                    Hub.set('ourServices', ourServices);   // ← СИНХРОНИЗАЦИЯ С HUB
                     updateDetailedExpenses();
                     updateGlobalExpenses();
                     updateCalcPanel();
@@ -821,5 +827,5 @@
     Hub.on('accidentData:loaded', () => updatePanel());
     
     createPanel();
-    console.log('[UI] Панель загружена v28.1 (Наши услуги только в основном меню)');
+    console.log('[UI] Панель загружена v28.2 (Наши услуги синхронизированы с Hub)');
 })();
