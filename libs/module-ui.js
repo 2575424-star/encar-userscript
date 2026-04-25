@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar UI Module (Final)
 // @namespace    http://tampermonkey.net/
-// @version      28.4
-// @description  Финальная версия панели с ожиданием CoreHub
+// @version      28.5
+// @description  Финальная версия панели (Наши услуги только в основной панели, убраны из админки)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        unsafeWindow
@@ -49,7 +49,6 @@
         let calcKoreaExpenses = 4000;
         let calcBishkekExpenses = 1600;
         let calcDocsRf = 85000;
-        let calcOurServices = 300000;
         
         function loadCalcExpenses() {
             const saved = localStorage.getItem('encar_calc_expenses');
@@ -59,7 +58,6 @@
                     calcKoreaExpenses = settings.koreaExpenses !== undefined ? settings.koreaExpenses : 4000;
                     calcBishkekExpenses = settings.bishkekExpenses !== undefined ? settings.bishkekExpenses : 1600;
                     calcDocsRf = settings.docsRf !== undefined ? settings.docsRf : 85000;
-                    calcOurServices = settings.ourServices !== undefined ? settings.ourServices : 300000;
                 } catch(e) {}
             }
         }
@@ -68,8 +66,7 @@
             localStorage.setItem('encar_calc_expenses', JSON.stringify({
                 koreaExpenses: calcKoreaExpenses,
                 bishkekExpenses: calcBishkekExpenses,
-                docsRf: calcDocsRf,
-                ourServices: calcOurServices
+                docsRf: calcDocsRf
             }));
         }
         
@@ -110,12 +107,10 @@
                     rfPreparation = settings.rfPreparation !== undefined ? settings.rfPreparation : 3000;
                     rfDocuments = settings.rfDocuments !== undefined ? settings.rfDocuments : 85000;
                     ourServices = settings.ourServices !== undefined ? settings.ourServices : 300000;
-                    calcOurServices = ourServices;
                     Hub.set('ourServices', ourServices, true);
                 } catch(e) {}
             } else {
                 ourServices = 300000;
-                calcOurServices = 300000;
                 Hub.set('ourServices', ourServices, true);
             }
         }
@@ -166,7 +161,7 @@
             const ourPrice = carPriceUSD * 0.96;
             const totalUSD = ourPrice + calcKoreaExpenses + currentTpo + calcBishkekExpenses;
             const calcRate = currentUsdtRate - 1;
-            const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf + calcOurServices;
+            const totalRUB = (totalUSD * calcRate) + utilizationFee + calcDocsRf;
             const markup = mainTotal - totalRUB;
             
             const priceUsdSpan = calcPanel.querySelector('#calc-price-usd');
@@ -176,7 +171,6 @@
             const usdtRateSpan = calcPanel.querySelector('#calc-usdt-rate');
             const utilSpan = calcPanel.querySelector('#calc-util');
             const docsSpan = calcPanel.querySelector('#calc-docs-value');
-            const servicesSpan = calcPanel.querySelector('#calc-services-value');
             const koreaSpan = calcPanel.querySelector('#calc-korea-value');
             const bishkekSpan = calcPanel.querySelector('#calc-bishkek-value');
             const totalRUBSpan = calcPanel.querySelector('#calc-total-rub');
@@ -188,10 +182,9 @@
             if (totalUSDSpan) totalUSDSpan.textContent = `${Math.round(totalUSD).toLocaleString()} $`;
             if (usdtRateSpan) usdtRateSpan.textContent = `${currentUsdtRate.toFixed(2)} ₽ (x${calcRate.toFixed(2)})`;
             if (utilSpan) utilSpan.textContent = `${Math.round(utilizationFee).toLocaleString()} ₽`;
-            if (docsSpan) docsSpan.textContent = `${Math.round(calcDocsRf).toLocaleString()} ₽`;
-            if (servicesSpan) {
-                servicesSpan.textContent = `${Math.round(calcOurServices).toLocaleString()} ₽`;
-                servicesSpan.onclick = () => editCalcExpense('services');
+            if (docsSpan) {
+                docsSpan.textContent = `${Math.round(calcDocsRf).toLocaleString()} ₽`;
+                docsSpan.onclick = () => editCalcExpense('docs');
             }
             if (koreaSpan) {
                 koreaSpan.textContent = `${calcKoreaExpenses.toLocaleString()} $`;
@@ -200,9 +193,6 @@
             if (bishkekSpan) {
                 bishkekSpan.textContent = `${calcBishkekExpenses.toLocaleString()} $`;
                 bishkekSpan.onclick = () => editCalcExpense('bishkek');
-            }
-            if (docsSpan) {
-                docsSpan.onclick = () => editCalcExpense('docs');
             }
             if (totalRUBSpan) totalRUBSpan.textContent = `${Math.round(totalRUB).toLocaleString()} ₽`;
             if (markupSpan) {
@@ -226,10 +216,6 @@
                     currentValue = calcDocsRf;
                     promptText = 'Документы РФ (₽):';
                     break;
-                case 'services':
-                    currentValue = calcOurServices;
-                    promptText = 'Наши услуги (₽):';
-                    break;
                 default: return;
             }
             const newValue = prompt(promptText, currentValue);
@@ -238,13 +224,6 @@
                 if (type === 'korea') calcKoreaExpenses = numValue;
                 if (type === 'bishkek') calcBishkekExpenses = numValue;
                 if (type === 'docs') calcDocsRf = numValue;
-                if (type === 'services') {
-                    calcOurServices = numValue;
-                    ourServices = numValue;
-                    saveDetailedSettings();
-                    Hub.set('ourServices', ourServices);
-                    updatePanel();
-                }
                 saveCalcExpenses();
                 updateCalcPanel();
             }
@@ -529,10 +508,6 @@
                                 <span style="color: #94a3b8; font-size: 10px;">📄 Документы:</span>
                                 <span id="calc-docs-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
                             </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="color: #94a3b8; font-size: 10px;">🤝 Наши услуги:</span>
-                                <span id="calc-services-value" class="calc-clickable" style="color: #fbbf24; font-weight: 600;">—</span>
-                            </div>
                             <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; border-top: 1px solid #334155;">
                                 <span style="color: #94a3b8; font-size: 10px;">💰 ИТОГО:</span>
                                 <span id="calc-total-rub" style="color: #22c55e; font-weight: 800; font-size: 12px;">—</span>
@@ -804,7 +779,7 @@
             document.getElementById('info-power').onclick = () => { const val = prompt('Мощность (л.с.):', Hub.get('carPowerHp') || ''); if (val && !isNaN(parseInt(val))) Hub.set('carPowerHp', parseInt(val)); };
             document.getElementById('info-vin').onclick = () => { const vin = Hub.get('carVin'); if (vin) { navigator.clipboard.writeText(vin); const span = document.getElementById('info-vin'); const orig = span.textContent; span.textContent = '✅ Скопировано!'; setTimeout(() => span.textContent = orig, 1500); } };
             
-            // Наши услуги (отдельный блок) - с синхронизацией с админкой
+            // Наши услуги (отдельный блок) - только в основной панели
             const ourSpanMain = document.getElementById('our-value');
             if (ourSpanMain) {
                 ourSpanMain.onclick = () => {
@@ -812,13 +787,10 @@
                     if (val !== null && !isNaN(parseFloat(val))) {
                         const numValue = parseFloat(val);
                         ourServices = numValue;
-                        calcOurServices = numValue;
                         saveDetailedSettings();
-                        saveCalcExpenses();
                         Hub.set('ourServices', ourServices);
                         updateDetailedExpenses();
                         updateGlobalExpenses();
-                        updateCalcPanel();
                         updatePanel();
                     }
                 };
@@ -853,6 +825,6 @@
         Hub.on('accidentData:loaded', () => updatePanel());
         
         createPanel();
-        console.log('[UI] Панель загружена v28.4 (с ожиданием CoreHub)');
+        console.log('[UI] Панель загружена v28.5 (Наши услуги только в основной панели)');
     });
 })();
