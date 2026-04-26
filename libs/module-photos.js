@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Encar Photos Module (Pro)
 // @namespace    http://tampermonkey.net/
-// @version      7.6
-// @description  Профессиональное КП (исправлена ошибка)
+// @version      7.7
+// @description  Профессиональное КП (исправлены настройки)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
 // @grant        GM_xmlhttpRequest
@@ -47,7 +47,8 @@
             managerName: 'Александр',
             managerPhone: '+7(922)333-66-88',
             customBrand: '',
-            customModel: ''
+            customModel: '',
+            logo: 'https://cdn.trx.tradedealer.ru/746/media/download/pB9Ltu__logo-indriv-e.svg'
         };
         
         try {
@@ -154,7 +155,7 @@
         }
         
         function getCarData() {
-            if (!Hub) return { brand: '—', model: '—', year: '—', month: null, vin: '—', mileage: null, engine: null, power: null, views: null };
+            if (!Hub) return { brand: '—', model: '—', year: '—', month: null, vin: '—', mileage: null, engine: null, power: null, views: null, accidentTotal: 'Без ДТП', carPriceKrw: 0, usdToKrw: 1473, selectedEuroPrice: null, calculatedTpo: 0, utilizationFee: 0, totalPrice: 0, usdRate: 0, eurRate: 0, usdtRate: 0, ourServices: 300000 };
             return {
                 brand: companySettings.customBrand || Hub.get('carBrand') || '—',
                 model: companySettings.customModel || Hub.get('carModel') || '—',
@@ -200,7 +201,20 @@
             const engineDisplay = data.engine ? (data.engine/1000).toFixed(1) + 'L' : '—';
             const exportFee = calculateExportFee();
             
-            const settingsJson = JSON.stringify(companySettings).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            // Создаем копию настроек для вставки в JavaScript
+            const settingsCopy = {
+                companyName: companySettings.companyName,
+                inn: companySettings.inn,
+                ogrn: companySettings.ogrn,
+                address: companySettings.address,
+                phone: companySettings.phone,
+                managerName: companySettings.managerName,
+                managerPhone: companySettings.managerPhone,
+                customBrand: companySettings.customBrand,
+                customModel: companySettings.customModel,
+                logo: companySettings.logo
+            };
+            const settingsJson = JSON.stringify(settingsCopy).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
             
             const html = `<!DOCTYPE html>
 <html>
@@ -304,57 +318,70 @@ body{font-family:'Segoe UI',system-ui;background:#e8edf2;padding:20px}
 <tr><td>📄 Расходы РФ</td><td>${formatNumber(rfRUB)} ₽</td></tr>
 <tr><td>🤝 Наши услуги</td><td>${formatNumber(data.ourServices)} ₽</td></tr>
 <tr class="total-row"><td>💰 ИТОГО</td><td>${formatNumber(data.totalPrice)} ₽</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <div class="footer"><p>Курс USD: ${data.usdRate.toFixed(2)} ₽ | EUR: ${data.eurRate.toFixed(2)} ₽</p><div class="requisites"><span>${companySettings.companyName}</span><span>ИНН ${companySettings.inn}</span><span>ОГРН ${companySettings.ogrn}</span><span>${companySettings.address}</span><span>тел ${companySettings.phone}</span></div><p>Дата: ${formatDate()}</p></div>
 </div>
 ${photosList.length ? `<div class="page"><div class="section"><div class="section-title">📸 ФОТОГРАФИИ</div><div class="photos-grid">${photosList.map(url => `<div class="photo-item"><img src="${url}" onerror="this.style.opacity=0.3"></div>`).join('')}</div></div><div class="footer"><p>© ${data.brand} ${data.model}</p></div></div>` : ''}
 </div>
 <script>
-const defaultSettings = JSON.parse('${settingsJson}');
-function showSettings() {
-    let s = defaultSettings;
-    try {
-        const saved = localStorage.getItem('encar_company_settings');
-        if(saved) s = JSON.parse(saved);
-    } catch(e) {}
-    const div = document.createElement('div');
-    div.id = 'sett-popup';
-    div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:20000;display:flex;align-items:center;justify-content:center';
-    div.innerHTML = '<div style="background:#1e293b;border-radius:16px;padding:20px;width:400px;max-width:90%;color:white;">' +
-        '<h3 style="color:#fbbf24;margin-bottom:15px;">⚙️ Настройки</h3>' +
-        '<div><input id="s-company" placeholder="Название компании" value="' + escapeHtml(s.companyName) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-inn" placeholder="ИНН" value="' + s.inn + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-ogrn" placeholder="ОГРН" value="' + s.ogrn + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-address" placeholder="Адрес" value="' + escapeHtml(s.address) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-phone" placeholder="Телефон" value="' + s.phone + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-manager" placeholder="Менеджер" value="' + escapeHtml(s.managerName) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-managerPhone" placeholder="Тел менеджера" value="' + s.managerPhone + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-brand" placeholder="Марка (вручную)" value="' + escapeHtml(s.customBrand || '') + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div><input id="s-model" placeholder="Модель (вручную)" value="' + escapeHtml(s.customModel || '') + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
-        '<div style="display:flex;gap:10px;margin-top:15px"><button id="sett-cancel" style="background:#475569;padding:8px 20px;border:none;border-radius:8px;color:white">Отмена</button><button id="sett-save" style="background:#fbbf24;padding:8px 20px;border:none;border-radius:8px;font-weight:bold">Сохранить</button></div>' +
-        '</div>';
-    document.body.appendChild(div);
-    document.getElementById('sett-cancel').onclick = () => div.remove();
-    document.getElementById('sett-save').onclick = () => {
-        const newSettings = {
-            companyName: document.getElementById('s-company').value,
-            inn: document.getElementById('s-inn').value,
-            ogrn: document.getElementById('s-ogrn').value,
-            address: document.getElementById('s-address').value,
-            phone: document.getElementById('s-phone').value,
-            managerName: document.getElementById('s-manager').value,
-            managerPhone: document.getElementById('s-managerPhone').value,
-            customBrand: document.getElementById('s-brand').value,
-            customModel: document.getElementById('s-model').value,
-            logo: defaultSettings.logo
+(function() {
+    const defaultSettings = ${settingsJson};
+    
+    window.showSettings = function() {
+        let s = JSON.parse(JSON.stringify(defaultSettings));
+        try {
+            const saved = localStorage.getItem('encar_company_settings');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                s = { ...s, ...parsed };
+            }
+        } catch(e) {}
+        
+        const div = document.createElement('div');
+        div.id = 'sett-popup';
+        div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:20000;display:flex;align-items:center;justify-content:center';
+        
+        function esc(str) {
+            if (str === undefined || str === null) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        
+        div.innerHTML = '<div style="background:#1e293b;border-radius:16px;padding:20px;width:400px;max-width:90%;color:white;">' +
+            '<h3 style="color:#fbbf24;margin-bottom:15px;">⚙️ Настройки</h3>' +
+            '<div><input id="s-company" placeholder="Название компании" value="' + esc(s.companyName) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-inn" placeholder="ИНН" value="' + esc(s.inn) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-ogrn" placeholder="ОГРН" value="' + esc(s.ogrn) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-address" placeholder="Адрес" value="' + esc(s.address) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-phone" placeholder="Телефон" value="' + esc(s.phone) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-manager" placeholder="Менеджер" value="' + esc(s.managerName) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-managerPhone" placeholder="Тел менеджера" value="' + esc(s.managerPhone) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-brand" placeholder="Марка (вручную)" value="' + esc(s.customBrand) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div><input id="s-model" placeholder="Модель (вручную)" value="' + esc(s.customModel) + '" style="width:100%;padding:8px;margin:5px 0;background:#0f172a;color:white;border:none;border-radius:8px"></div>' +
+            '<div style="display:flex;gap:10px;margin-top:15px"><button id="sett-cancel" style="background:#475569;padding:8px 20px;border:none;border-radius:8px;color:white">Отмена</button><button id="sett-save" style="background:#fbbf24;padding:8px 20px;border:none;border-radius:8px;font-weight:bold">Сохранить</button></div>' +
+            '</div>';
+        document.body.appendChild(div);
+        document.getElementById('sett-cancel').onclick = () => div.remove();
+        document.getElementById('sett-save').onclick = () => {
+            const newSettings = {
+                companyName: document.getElementById('s-company').value,
+                inn: document.getElementById('s-inn').value,
+                ogrn: document.getElementById('s-ogrn').value,
+                address: document.getElementById('s-address').value,
+                phone: document.getElementById('s-phone').value,
+                managerName: document.getElementById('s-manager').value,
+                managerPhone: document.getElementById('s-managerPhone').value,
+                customBrand: document.getElementById('s-brand').value,
+                customModel: document.getElementById('s-model').value,
+                logo: defaultSettings.logo
+            };
+            localStorage.setItem('encar_company_settings', JSON.stringify(newSettings));
+            alert('Настройки сохранены. Обновите страницу.');
+            div.remove();
         };
-        localStorage.setItem('encar_company_settings', JSON.stringify(newSettings));
-        alert('Настройки сохранены. Обновите страницу.');
-        div.remove();
     };
-}
-function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { if(m === '&') return '&amp;'; if(m === '<') return '&lt;'; if(m === '>') return '&gt;'; return m; }).replace(/"/g, '&quot;'); }
+})();
 </script>
 </body>
 </html>`;
@@ -370,6 +397,6 @@ function escapeHtml(str) { return str.replace(/[&<>]/g, function(m) { if(m === '
             getPhotos: () => photosList
         };
         
-        console.log('[Photos] Модуль загружен v7.6');
+        console.log('[Photos] Модуль загружен v7.7');
     });
 })();
