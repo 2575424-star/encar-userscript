@@ -459,6 +459,8 @@
     }
 
     function getCarId() {
+        const pathId = window.location.pathname.match(/\/cars\/detail\/(\d+)/);
+        if (pathId) return pathId[1];
         const urlMatch = window.location.href.match(/carid=(\d+)/);
         if (urlMatch) return urlMatch[1];
         if (window.__PRELOADED_STATE__?.cars?.base?.vehicleId) {
@@ -523,7 +525,7 @@
                         }
                         const usdToKrw = Hub.get('usdToKrw') || 1473;
                         const totalPaymentUsd = Math.round(totalPaymentWon / usdToKrw);
-                        callback({ count: data.myAccidentCnt || 0, totalWon: totalPaymentWon, totalUsd: totalPaymentUsd, details: accidents });
+                        callback({ count: Number.isInteger(data.myAccidentCnt) ? data.myAccidentCnt : undefined, totalWon: totalPaymentWon, totalUsd: totalPaymentUsd, details: accidents });
                     } catch(e) { callback(null); }
                 } else { callback(null); }
             },
@@ -533,7 +535,7 @@
 
     function formatAccidentTotal(accidentInfo) {
         if (!accidentInfo || accidentInfo.count === undefined) return '—';
-        if (accidentInfo.count === 0) return 'Без ДТП';
+        if (accidentInfo.count === 0) return 'Страховые случаи не указаны';
         return `${accidentInfo.totalUsd.toLocaleString()} $`;
     }
 

@@ -23,10 +23,11 @@
         const interval = setInterval(() => {
             if (unsafeWindow.EncarHub) {
                 clearInterval(interval);
+                clearTimeout(timeout);
                 callback();
             }
         }, 100);
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
             clearInterval(interval);
             console.warn('[Photos] CoreHub не найден, но продолжаем');
             callback();
@@ -39,16 +40,16 @@
         
         // Настройки компании
         let companySettings = {
-            companyName: 'ООО "ИнДрайв"',
-            inn: '3662313297',
-            ogrn: '1253600001973',
-            address: 'г. Воронеж, пр. Патриотов 47и',
-            phone: '+7(473)233-44-55',
-            managerName: 'Александр',
-            managerPhone: '+7(922)333-66-88',
+            companyName: 'Бум Авто',
+            inn: '',
+            ogrn: '',
+            address: '',
+            phone: '',
+            managerName: '',
+            managerPhone: '',
             customBrand: '',
             customModel: '',
-            logo: 'https://cdn.trx.tradedealer.ru/746/media/download/pB9Ltu__logo-indriv-e.svg'
+            logo: ''
         };
         
         try {
@@ -81,19 +82,19 @@
             if (saved) {
                 try {
                     const s = JSON.parse(saved);
-                    koreaInspection = s.koreaInspection || 150000;
-                    koreaDealerCommission = s.koreaDealerCommission || 440000;
-                    koreaDelivery = s.koreaDelivery || 250000;
-                    koreaEvacuator = s.koreaEvacuator || 50000;
-                    koreaExportFeePercent = s.koreaExportFeePercent || 0.4;
-                    koreaExportFeeMin = s.koreaExportFeeMin || 100000;
-                    koreaFreight = s.koreaFreight || 5000000;
-                    bishkekUnloading = s.bishkekUnloading || 200;
-                    bishkekBroker = s.bishkekBroker || 400;
-                    bishkekDelivery = s.bishkekDelivery || 1200;
-                    rfUnloading = s.rfUnloading || 3000;
-                    rfPreparation = s.rfPreparation || 3000;
-                    rfDocuments = s.rfDocuments || 85000;
+                    koreaInspection = s.koreaInspection ?? 150000;
+                    koreaDealerCommission = s.koreaDealerCommission ?? 440000;
+                    koreaDelivery = s.koreaDelivery ?? 250000;
+                    koreaEvacuator = s.koreaEvacuator ?? 50000;
+                    koreaExportFeePercent = s.koreaExportFeePercent ?? 0.4;
+                    koreaExportFeeMin = s.koreaExportFeeMin ?? 100000;
+                    koreaFreight = s.koreaFreight ?? 5000000;
+                    bishkekUnloading = s.bishkekUnloading ?? 200;
+                    bishkekBroker = s.bishkekBroker ?? 400;
+                    bishkekDelivery = s.bishkekDelivery ?? 1200;
+                    rfUnloading = s.rfUnloading ?? 3000;
+                    rfPreparation = s.rfPreparation ?? 3000;
+                    rfDocuments = s.rfDocuments ?? 85000;
                 } catch(e) {}
             }
         }
@@ -105,7 +106,7 @@
         }
         
         function calculateTotalKoreaUSD() {
-            const usdToKrw = Hub ? (Hub.get('usdToKrw') || 1473) : 1473;
+            const usdToKrw = Hub ? (Hub.get('usdToKrw') ?? NaN) : 1473;
             const totalKrw = koreaInspection + koreaDealerCommission + koreaDelivery + 
                              koreaEvacuator + calculateExportFee() + koreaFreight;
             return Math.round(totalKrw / usdToKrw);
@@ -120,6 +121,8 @@
         }
         
         function findCarId() {
+            const pathId = window.location.pathname.match(/\/cars\/detail\/(\d+)/);
+            if (pathId) return pathId[1];
             const urlMatch = window.location.href.match(/carid=(\d+)/);
             if (urlMatch) return urlMatch[1];
             return null;
@@ -129,19 +132,17 @@
             return new Promise((resolve) => {
                 const carId = findCarId();
                 if (!carId) { resolve([]); return; }
-                const urls = [];
-                const baseUrl = `https://ci.encar.com/carpicture/carpicture${carId.slice(-2)}/pic${carId.slice(0,4)}/${carId}_`;
-                for (let i = 1; i <= 12; i++) {
-                    urls.push(`${baseUrl}${String(i).padStart(3,'0')}.jpg`);
-                }
-                photosList = urls.slice(0, 6);
+                const urls = Array.from(document.querySelectorAll('img')).map(img => img.currentSrc || img.src).filter(src => {
+                    try { const u = new URL(src); return u.protocol === 'https:' && u.hostname === 'ci.encar.com' && u.pathname.includes(carId + '_'); } catch (_) { return false; }
+                });
+                photosList = [...new Set(urls)].slice(0, 6);
                 if (Hub) Hub.set('photosList', photosList);
                 resolve(photosList);
             });
         }
         
         function formatNumber(num) { 
-            return num ? num.toLocaleString('ru-RU') : '—'; 
+            return Number.isFinite(num) ? num.toLocaleString('ru-RU') : '—'; 
         }
         
         function formatDate() {
@@ -155,7 +156,7 @@
         }
         
         function getCarData() {
-            if (!Hub) return { brand: '—', model: '—', year: '—', month: null, vin: '—', mileage: null, engine: null, power: null, views: null, accidentTotal: 'Без ДТП', carPriceKrw: 0, usdToKrw: 1473, selectedEuroPrice: null, calculatedTpo: 0, utilizationFee: 0, totalPrice: 0, usdRate: 0, eurRate: 0, usdtRate: 0, ourServices: 300000 };
+            if (!Hub) return { brand: '—', model: '—', year: '—', month: null, vin: '—', mileage: null, engine: null, power: null, views: null, accidentTotal: 'Нет данных о страховых случаях', carPriceKrw: 0, usdToKrw: 1473, selectedEuroPrice: null, calculatedTpo: 0, utilizationFee: 0, totalPrice: 0, usdRate: 0, eurRate: 0, usdtRate: 0, ourServices: 300000 };
             return {
                 brand: companySettings.customBrand || Hub.get('carBrand') || '—',
                 model: companySettings.customModel || Hub.get('carModel') || '—',
@@ -166,17 +167,17 @@
                 engine: Hub.get('carEngineVolume'),
                 power: Hub.get('carPowerHp'),
                 views: Hub.get('carViews'),
-                accidentTotal: Hub.get('accidentTotal') || 'Без ДТП',
+                accidentTotal: Hub.get('accidentTotal') || 'Нет данных о страховых случаях',
                 carPriceKrw: Hub.get('carPriceKrw') || 0,
-                usdToKrw: Hub.get('usdToKrw') || 1473,
+                usdToKrw: Hub.get('usdToKrw') ?? NaN,
                 selectedEuroPrice: Hub.get('selectedEuroPrice'),
-                calculatedTpo: Hub.get('calculatedTpo') || 0,
-                utilizationFee: Hub.get('utilizationFee') || 0,
-                totalPrice: Hub.get('totalPrice') || 0,
+                calculatedTpo: Hub.get('calculatedTpo'),
+                utilizationFee: Hub.get('utilizationFee'),
+                totalPrice: Hub.get('totalPrice'),
                 usdRate: Hub.get('usdRate') || 0,
                 eurRate: Hub.get('eurRate') || 0,
                 usdtRate: Hub.get('usdtRate') || 0,
-                ourServices: Hub.get('ourServices') || 300000
+                ourServices: Hub.get('ourServices') ?? 300000
             };
         }
         
@@ -265,7 +266,7 @@ body{font-family:'Segoe UI',system-ui;background:#e8edf2;padding:20px}
 <div class="logo-area"><img src="${companySettings.logo}" onerror="this.style.display='none'"><div class="company-info"><strong>${companySettings.companyName}</strong><br>ИНН ${companySettings.inn} | ОГРН ${companySettings.ogrn}<br>${companySettings.address}<br>тел ${companySettings.phone}</div></div>
 <div class="car-title">${data.brand} ${data.model}</div>
 <div class="manager-info">${companySettings.managerName}<br>тел ${companySettings.managerPhone}</div>
-<div class="validity">⚡ Предложение действительно до ${formatValidUntil()}</div>
+<div class="validity">Расчёт на ${formatDate()}; окончательные платежи уточняются</div>
 </div>
 <div class="section"><div class="section-title">📋 ИНФОРМАЦИЯ</div>
 <div class="info-grid">
@@ -278,7 +279,7 @@ body{font-family:'Segoe UI',system-ui;background:#e8edf2;padding:20px}
 <div class="info-row"><span>💸 Страховые</span><span>${data.accidentTotal}</span></div>
 </div></div>
 <div class="section"><div class="section-title">💰 РАСЧЁТ</div>
-<div class="info-grid"><div class="info-row"><span>💰 Цена в Корее</span><span>${data.carPriceKrw ? formatNumber(data.carPriceKrw) + ' ₩' : '—'} / ${priceUsd ? formatNumber(priceUsd) + ' $' : '—'}</span></div></div>
+<p>Предварительный расчёт. Курсы и тарифы ТПО/утильсбора требуют проверки. Прочерк означает отсутствие данных.</p><div class="info-grid"><div class="info-row"><span>💰 Цена в Корее</span><span>${data.carPriceKrw ? formatNumber(data.carPriceKrw) + ' ₩' : '—'} / ${priceUsd ? formatNumber(priceUsd) + ' $' : '—'}</span></div></div>
 <div style="margin:10px 0 5px;font-weight:700">🇰🇷 Расходы Корея</div>
 <div class="expense-detail">
 <div class="expense-row"><span>Осмотр:</span><span>${formatNumber(koreaInspection)} ₩ (${Math.round(koreaInspection/data.usdToKrw)} $)</span></div>
@@ -307,7 +308,7 @@ body{font-family:'Segoe UI',system-ui;background:#e8edf2;padding:20px}
 <div style="margin:10px 0 5px;font-weight:700">🏛️ Таможня</div>
 <div class="expense-detail">
 <div class="expense-row"><span>Таможенная стоимость:</span><span>${data.selectedEuroPrice ? formatNumber(data.selectedEuroPrice) + ' €' : '—'}</span></div>
-<div class="expense-row"><span>ТПО (48%):</span><span>${formatNumber(data.calculatedTpo)} $</span></div>
+<div class="expense-row"><span>ТПО:</span><span>${formatNumber(data.calculatedTpo)} $</span></div>
 <div class="expense-row"><span>Утильсбор:</span><span>${formatNumber(data.utilizationFee)} ₽</span></div>
 </div>
 <table class="price-table"><thead><tr><th>Статья</th><th>Сумма</th></tr></thead>
@@ -317,7 +318,7 @@ body{font-family:'Segoe UI',system-ui;background:#e8edf2;padding:20px}
 <tr><td>♻️ Утильсбор</td><td>${formatNumber(data.utilizationFee)} ₽</td></tr>
 <tr><td>📄 Расходы РФ</td><td>${formatNumber(rfRUB)} ₽</td></tr>
 <tr><td>🤝 Наши услуги</td><td>${formatNumber(data.ourServices)} ₽</td></tr>
-<tr class="total-row"><td>💰 ИТОГО</td><td>${formatNumber(data.totalPrice)} ₽</td></tr>
+<tr class="total-row"><td>Предварительный итог</td><td>${formatNumber(data.totalPrice)} ₽</td></tr>
 </tbody>
 </table>
 </div>

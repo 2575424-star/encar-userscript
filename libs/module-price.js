@@ -5,6 +5,7 @@
 // @description  Загрузка стоимости из CSV файла в репозитории GitHub (с авто-выбором года)
 // @match        *://www.encar.com/cars/detail/*
 // @match        *://fem.encar.com/cars/detail/*
+// @connect      raw.githubusercontent.com
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // ==/UserScript==
@@ -31,18 +32,28 @@
     let selectedPriceManual = null;
     
     function parseCSV(csvText) {
-        const lines = csvText.split(/\r?\n/);
+        const rows = []; let row = [], field = '', quoted = false;
+        for (let i = 0; i < csvText.length; i++) {
+            const c = csvText[i];
+            if (c === '"') { if (quoted && csvText[i+1] === '"') { field += '"'; i++; } else quoted = !quoted; }
+            else if (c === ',' && !quoted) { row.push(field.trim()); field = ''; }
+            else if (c === '\n' && !quoted) { row.push(field.trim()); rows.push(row); row = []; field = ''; }
+            else field += c;
+        }
+        if (quoted) return [];
+        row.push(field.trim()); rows.push(row);
+        const lines = rows;
         if (lines.length < 2) return [];
         
         let headerIndex = 0;
         for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('Марка') && lines[i].includes('Модель')) {
+            if (lines[i].some(v => v.includes('Марка')) && lines[i].some(v => v.includes('Модель'))) {
                 headerIndex = i;
                 break;
             }
         }
         
-        const headers = lines[headerIndex].split(',').map(h => h.trim().replace(/"/g, ''));
+        const headers = lines[headerIndex];
         const colBrand = headers.findIndex(h => h.includes('Марка'));
         const colModel = headers.findIndex(h => h.includes('Модель'));
         const colEngine = headers.findIndex(h => h.includes('Объем') || h.includes('Объём'));
@@ -56,14 +67,14 @@
         
         const data = [];
         for (let i = headerIndex + 1; i < lines.length; i++) {
-            const line = lines[i].trim();
+            const line = lines[i];
             if (!line) continue;
             
-            const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+            const values = line;
             if (values.length <= Math.max(colBrand, colModel, colPrice)) continue;
             
-            const price = parseFloat(values[colPrice].replace(/[^\d.-]/g, '').replace(',', '.'));
-            if (isNaN(price)) continue;
+            const price = Number(values[colPrice].replace(/\s/g, '').replace(',', '.'));
+            if (!Number.isFinite(price) || price <= 0) continue;
             
             const year = colYear !== -1 ? parseInt(values[colYear], 10) : null;
             const engine = colEngine !== -1 ? values[colEngine] : null;
@@ -85,6 +96,7 @@
         if (!allPriceData.length) return null;
         
         const strYear = parseInt(year);
+        if (!brand || !model || engine == null || !strYear) return null;
         const engineStr = String(engine || '').replace(/\s/g, '');
         
         let found = allPriceData.find(item =>
@@ -93,14 +105,6 @@
             (!engineStr || String(item.Объем || '').replace(/\s/g, '') === engineStr) &&
             (!strYear || item.Год === strYear)
         );
-        
-        if (!found && strYear) {
-            found = allPriceData.find(item =>
-                item.Марка?.toLowerCase() === brand?.toLowerCase() &&
-                item.Модель?.toLowerCase() === model?.toLowerCase() &&
-                (!engineStr || String(item.Объем || '').replace(/\s/g, '') === engineStr)
-            );
-        }
         
         return found ? found.Цена : null;
     }
@@ -124,6 +128,7 @@
         allPriceData = data;
         priceDataLoaded = true;
         Hub.set('priceDataLoaded', true);
+        Hub.set('priceDataError', null);
         Hub.set('allPriceData', allPriceData);
         Hub.emit('priceData:loaded', allPriceData);
         console.log(`[Price] ✅ Данные сохранены в Hub: ${allPriceData.length} записей`);
@@ -176,28 +181,14 @@
     }
     
     function setDefaultPriceData() {
-        allPriceData = [
-            { Марка: 'BMW', Модель: 'X6', Объем: '3000', Год: 2025, Цена: 33000 },
-            { Марка: 'BMW', Модель: 'X5', Объем: '3000', Год: 2025, Цена: 32000 },
-            { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2015, Цена: 25000 },
-            { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2016, Цена: 27000 },
-            { Марка: 'MERCEDES-BENZ', Модель: 'S-CLASS', Объем: '5500', Год: 2017, Цена: 30000 },
-            { Марка: 'HYUNDAI', Модель: 'SANTA FE', Объем: '2000', Год: 2025, Цена: 25000 },
-            { Марка: 'KIA', Модель: 'SORENTO', Объем: '2000', Год: 2025, Цена: 24000 }
-        ];
-        priceDataLoaded = true;
-        Hub.set('priceDataLoaded', true);
-        Hub.set('allPriceData', allPriceData);
-        console.warn('[Price] Используются тестовые данные (CSV не загружен)');
-        autoSelectPrice();
-        
-        const euroPrice = getCurrentEuroPrice();
-        const priceSpan = document.getElementById('price-euro');
-        if (priceSpan && euroPrice) {
-            priceSpan.textContent = `${euroPrice.toLocaleString()} €`;
-        }
+        allPriceData = [];
+        priceDataLoaded = false;
+        Hub.set('priceDataLoaded', false);
+        Hub.set('allPriceData', []);
+        Hub.set('selectedEuroPrice', null);
+        Hub.set('priceDataError', 'Таблица ТПО не загрузилась. Укажите ТПО вручную.');
     }
-    
+
     function autoSelectPrice() {
         const brand = Hub.get('carBrand');
         const model = Hub.get('carModel');
@@ -206,6 +197,7 @@
         
         console.log(`[Price] Авто-выбор: ${brand} ${model} ${engine}cc ${year}`);
         
+        Hub.set('selectedEuroPrice', null);
         if (brand && model && engine && year && allPriceData.length) {
             const price = findPriceFromData(brand, model, engine, year);
             if (price !== null) {
@@ -253,7 +245,7 @@
         if (!innerDiv) return;
         
         if (!allPriceData.length) {
-            innerDiv.innerHTML = '<div style="text-align:center; padding:8px;">Загрузка данных...</div>';
+            innerDiv.innerHTML = '<div style="text-align:center; padding:8px;">Таблица недоступна или загружается. ТПО можно ввести вручную.</div>';
             return;
         }
         
@@ -387,6 +379,7 @@
     }
     
     unsafeWindow.EncarPrice = {
+        resetManualPrice: () => { selectedPriceManual = null; autoSelectPrice(); },
         setManual: setManualPrice,
         refresh: loadPriceData,
         findPrice: (brand, model, engine, year) => findPriceFromData(brand, model, engine, year),
@@ -426,12 +419,15 @@
     
     // Подписка на изменение марки/модели/объёма для обновления отображения
     Hub.on('carBrand:changed', () => {
+        autoSelectPrice();
         if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay();
     });
     Hub.on('carModel:changed', () => {
+        autoSelectPrice();
         if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay();
     });
     Hub.on('carEngineVolume:changed', () => {
+        autoSelectPrice();
         if (unsafeWindow.EncarPrice?.updateDisplay) unsafeWindow.EncarPrice.updateDisplay();
     });
     
@@ -439,6 +435,8 @@
         updatePriceContentDisplay();
     });
     
+    Hub.on('carId:changed', () => { selectedPriceManual = null; selectedPriceBrand = null; selectedPriceModel = null; selectedPriceEngine = null; selectedPriceYear = null; Hub.set('selectedEuroPrice', null); });
+
     // Запускаем загрузку
     loadPriceData();
     
