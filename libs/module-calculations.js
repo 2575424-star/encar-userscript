@@ -33,10 +33,10 @@
         if (manualTpo !== null && manualTpo !== undefined) return valid(manualTpo) ? manualTpo : null;
 
         const euroPrice = Hub.get('selectedEuroPrice');
-        const eurUsdRate = Hub.get('eurUsdRate');
+        const eurUsdRate = Hub.get('manualEurUsdRate') ?? Hub.get('eurUsdRate');
 
-        if (euroPrice && euroPrice > 0 && eurUsdRate > 0) {
-            return Math.round(euroPrice * eurUsdRate * 0.48);
+        if (valid(euroPrice) && euroPrice > 0 && valid(eurUsdRate) && eurUsdRate > 0) {
+            return Math.round(euroPrice * 0.48 * eurUsdRate * 100) / 100;
         }
         return null;
     }
@@ -130,6 +130,7 @@
     Hub.on('carEngineVolume:changed', () => updateAllCalculations());
     Hub.on('carPowerHp:changed', () => updateAllCalculations());
     Hub.on('selectedEuroPrice:changed', () => updateAllCalculations());
+    Hub.on('manualEurUsdRate:changed', () => updateAllCalculations());
     Hub.on('eurUsdRate:changed', () => updateAllCalculations());
     Hub.on('usdtRate:changed', () => updateAllCalculations());
     Hub.on('usdToKrw:changed', () => updateAllCalculations());

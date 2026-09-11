@@ -365,6 +365,22 @@
             const utilizationFee = Hub.get('utilizationFee');
             if (utilSpan) utilSpan.innerHTML = Number.isFinite(utilizationFee) ? `${formatNumber(utilizationFee)} ₽` : '<span style="color:#f97316;">заполните</span>';
             
+            const eurUsdButton = mainPanel.querySelector('#tpo-eurusd');
+            const effectiveEurUsd = Hub.get('manualEurUsdRate') ?? Hub.get('eurUsdRate');
+            if (eurUsdButton) {
+                const manual = Hub.get('manualEurUsdRate') != null;
+                eurUsdButton.textContent = Number.isFinite(effectiveEurUsd) && effectiveEurUsd > 0 ? `ТПО: EUR × 48% × ${effectiveEurUsd.toFixed(4)} USD/EUR (${manual ? 'вручную' : 'по курсам источника'})` : 'ТПО: укажите курс USD за 1 EUR';
+                eurUsdButton.onclick = () => {
+                    const value = prompt('Долларов за 1 евро. Пусто — автоматический курс:', Hub.get('manualEurUsdRate') ?? effectiveEurUsd ?? '');
+                    if (value === null) return;
+                    if (value.trim() === '') Hub.set('manualEurUsdRate', null);
+                    else {
+                        const rate = inputNumber(value);
+                        if (!Number.isFinite(rate) || rate <= 0) return alert('Введите положительный курс');
+                        Hub.set('manualEurUsdRate', rate);
+                    }
+                };
+            }
             const totalPrice = Hub.get('totalPrice');
             const notice = mainPanel.querySelector('#calculation-notice');
             if (notice) notice.textContent = [Hub.get('calculationNotice'), Hub.get('currencyStatus')].filter(Boolean).join(' ');
@@ -729,6 +745,7 @@
                         </div>
                     </div>
                     
+                    <button id="tpo-eurusd" type="button" style="background:transparent;color:#fbbf24;border:1px solid #475569;border-radius:8px;padding:6px;margin-top:8px;cursor:pointer">Курс EUR/USD для ТПО</button>
                     <div id="calculation-notice" style="color:#fbbf24;font-size:11px;margin-top:8px;"></div>
                     <div style="margin-top:12px;">
                         <button id="print-report-btn" style="width:100%;background:#fbbf24;border:none;padding:8px 0;border-radius:10px;font-weight:700;cursor:pointer;color:#0f172a;font-size:13px;">🖨️ Коммерческое предложение</button>
