@@ -17,6 +17,7 @@
     }
 
     const Hub = unsafeWindow.EncarHub;
+    const valid = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
     // Значения по умолчанию для расходов
     const DEFAULT_EXPENSES = {
@@ -29,13 +30,13 @@
     // Расчёт ТПО
     function calculateTpo() {
         const manualTpo = Hub.get('manualTpo');
-        if (manualTpo !== null && manualTpo !== undefined) return manualTpo;
+        if (manualTpo !== null && manualTpo !== undefined) return valid(manualTpo) ? manualTpo : null;
 
         const euroPrice = Hub.get('selectedEuroPrice');
-        const eurUsdRate = Hub.get('eurUsdRate');
+        const eurUsdRate = Hub.get('manualEurUsdRate') ?? Hub.get('eurUsdRate');
 
-        if (euroPrice && euroPrice > 0 && eurUsdRate > 0) {
-            return Math.round(euroPrice * eurUsdRate * 0.48);
+        if (valid(euroPrice) && euroPrice > 0 && valid(eurUsdRate) && eurUsdRate > 0) {
+            return Math.round(euroPrice * 0.48 * eurUsdRate * 100) / 100;
         }
         return null;
     }
@@ -43,10 +44,10 @@
     // Расчёт утильсбора
     function calculateUtilizationFee(engineCc, hp) {
         const manualFee = Hub.get('manualUtilizationFee');
-        if (manualFee !== null && manualFee !== undefined) return manualFee;
+        if (manualFee !== null && manualFee !== undefined) return valid(manualFee) ? manualFee : null;
 
-        if (!engineCc || !hp) return null;
-        if (engineCc === 0) return 26000;
+        // Электромобиль требует отдельного подтверждённого тарифа. Нулевой объём не равен отсутствию данных.
+        if (!valid(engineCc) || engineCc === 0 || !valid(hp) || hp === 0) return null;
 
         // Логика расчёта в зависимости от объёма и мощности
         if (engineCc <= 2000) {
@@ -78,34 +79,16 @@
 
     // Расчёт итоговой стоимости
     function calculateTotalPrice() {
-        const carPriceKrw = Hub.get('carPriceKrw') || 0;
-        const usdToKrw = Hub.get('usdToKrw') || 1473;
-        const usdtRate = Hub.get('usdtRate') || 90;
-
-        const priceUsd = carPriceKrw ? Math.round(carPriceKrw / usdToKrw) : 0;
-        const koreaLogistics = Hub.get('koreaLogistics') || DEFAULT_EXPENSES.koreaLogistics;
-        const tpoValue = calculateTpo() || 0;
-        const servicesBishkek = Hub.get('servicesBishkek') || DEFAULT_EXPENSES.servicesBishkek;
-        const utilizationFee = Hub.get('utilizationFee') || 0;
-        const docsRf = Hub.get('docsRf') || DEFAULT_EXPENSES.docsRf;
-        const ourServices = Hub.get('ourServices') || DEFAULT_EXPENSES.ourServices;
-
-        const totalUsd = priceUsd + koreaLogistics + tpoValue + servicesBishkek;
-        const totalRubBeforeFees = totalUsd * usdtRate;
-
-        return Math.round(totalRubBeforeFees + utilizationFee + docsRf + ourServices);
+        const price = Hub.get('carPriceKrw'), krw = Hub.get('usdToKrw'), rate = Hub.get('usdtRate');
+        const tpo = calculateTpo(), util = calculateUtilizationFee(Hub.get('carEngineVolume'), Hub.get('carPowerHp'));
+        const expenses = Object.keys(DEFAULT_EXPENSES).map(key => Hub.get(key) ?? DEFAULT_EXPENSES[key]);
+        if (![price, krw, rate].every(v => valid(v) && v > 0) || ![tpo, util, ...expenses].every(valid)) return null;
+        const [korea, bishkek, docs, services] = expenses;
+        return Math.round((price / krw + korea + tpo + bishkek) * rate + util + docs + services);
     }
 
-    // Обновление утильсбора при изменении данных
     function updateUtilizationFee() {
-        const engineCc = Hub.get('carEngineVolume');
-        const hp = Hub.get('carPowerHp');
-
-        if (engineCc && hp) {
-            const fee = calculateUtilizationFee(engineCc, hp);
-            Hub.set('utilizationFee', fee);
-            console.log(`[Calculations] Утильсбор: ${fee?.toLocaleString()} ₽`);
-        }
+        Hub.set('utilizationFee', calculateUtilizationFee(Hub.get('carEngineVolume'), Hub.get('carPowerHp')));
     }
 
     // Обновление всех расчётов
@@ -117,29 +100,20 @@
 
         const total = calculateTotalPrice();
         Hub.set('totalPrice', total);
+        Hub.set('calculationNotice', total === null ? 'Расчёт неполный: заполните цену, курсы, ТПО и утильсбор.' : 'Предварительный расчёт. Таблица ТПО и тариф утильсбора требуют подтверждения.');
 
         Hub.emit('calculations:updated', { tpo, total });
     }
 
     // Загрузка сохранённых настроек
     function loadSettingsFromStorage() {
-        const saved = localStorage.getItem('encar_settings');
-        if (saved) {
-            try {
-                const settings = JSON.parse(saved);
-                if (Date.now() - settings.timestamp < 90 * 24 * 60 * 60 * 1000) {
-                    Hub.set('koreaLogistics', settings.koreaLogistics || DEFAULT_EXPENSES.koreaLogistics);
-                    Hub.set('servicesBishkek', settings.servicesBishkek || DEFAULT_EXPENSES.servicesBishkek);
-                    Hub.set('docsRf', settings.docsRf || DEFAULT_EXPENSES.docsRf);
-                    Hub.set('ourServices', settings.ourServices || DEFAULT_EXPENSES.ourServices);
-                }
-            } catch(e) {}
-        } else {
-            Hub.set('koreaLogistics', DEFAULT_EXPENSES.koreaLogistics);
-            Hub.set('servicesBishkek', DEFAULT_EXPENSES.servicesBishkek);
-            Hub.set('docsRf', DEFAULT_EXPENSES.docsRf);
-            Hub.set('ourServices', DEFAULT_EXPENSES.ourServices);
-        }
+        let settings = {};
+        try {
+            const saved = JSON.parse(localStorage.getItem('encar_settings'));
+            if (saved && Date.now() - saved.timestamp < 90 * 86400000) settings = saved;
+        } catch (_) {}
+        // Сначала разобрать весь снимок: слушатели сохранения не должны затереть его в ходе загрузки.
+        for (const [key, fallback] of Object.entries(DEFAULT_EXPENSES)) Hub.set(key, valid(settings[key]) ? settings[key] : fallback);
     }
 
     function saveSettingsToStorage() {
@@ -156,6 +130,7 @@
     Hub.on('carEngineVolume:changed', () => updateAllCalculations());
     Hub.on('carPowerHp:changed', () => updateAllCalculations());
     Hub.on('selectedEuroPrice:changed', () => updateAllCalculations());
+    Hub.on('manualEurUsdRate:changed', () => updateAllCalculations());
     Hub.on('eurUsdRate:changed', () => updateAllCalculations());
     Hub.on('usdtRate:changed', () => updateAllCalculations());
     Hub.on('usdToKrw:changed', () => updateAllCalculations());
@@ -172,34 +147,27 @@
     // Загрузка сохранённых значений
     loadSettingsFromStorage();
 
-    // Загрузка сохранённых ручных значений
-    const carId = Hub.get('carId');
-    if (carId) {
-        const savedTpo = localStorage.getItem(`encar_tpo_${carId}`);
-        if (savedTpo) {
+    let loadingOverrides = false;
+    function loadCarOverrides() {
+        loadingOverrides = true;
+        const id = Hub.get('carId');
+        for (const [key, prefix, field] of [['manualTpo', 'encar_tpo_', 'tpo'], ['manualUtilizationFee', 'encar_util_', 'value']]) {
+            let value = null;
             try {
-                const tpoData = JSON.parse(savedTpo);
-                if (Date.now() - tpoData.timestamp < 30 * 24 * 60 * 60 * 1000) {
-                    Hub.set('manualTpo', tpoData.tpo);
-                }
-            } catch(e) {}
+                const saved = id ? JSON.parse(localStorage.getItem(prefix + id)) : null;
+                if (saved && Date.now() - saved.timestamp < 30 * 86400000 && valid(saved[field])) value = saved[field];
+            } catch (_) {}
+            Hub.set(key, value);
         }
-
-        const savedUtil = localStorage.getItem(`encar_util_${carId}`);
-        if (savedUtil) {
-            try {
-                const utilData = JSON.parse(savedUtil);
-                if (Date.now() - utilData.timestamp < 30 * 24 * 60 * 60 * 1000) {
-                    Hub.set('manualUtilizationFee', utilData.value);
-                }
-            } catch(e) {}
-        }
+        loadingOverrides = false;
     }
+    Hub.on('carId:changed', loadCarOverrides);
+    loadCarOverrides();
 
     // Сохранение ручных значений
     Hub.on('manualTpo:changed', (data) => {
         const id = Hub.get('carId');
-        if (id) {
+        if (id && !loadingOverrides) {
             localStorage.setItem(`encar_tpo_${id}`, JSON.stringify({
                 tpo: data.value,
                 timestamp: Date.now()
@@ -209,7 +177,7 @@
 
     Hub.on('manualUtilizationFee:changed', (data) => {
         const id = Hub.get('carId');
-        if (id) {
+        if (id && !loadingOverrides) {
             localStorage.setItem(`encar_util_${id}`, JSON.stringify({
                 value: data.value,
                 timestamp: Date.now()
