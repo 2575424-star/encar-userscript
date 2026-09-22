@@ -1,0 +1,52 @@
+{
+  "vehicleId": 42752324,
+  "category": {
+    "type": "CAR",
+    "manufacturerCd": "013",
+    "manufacturerName": "벤츠",
+    "modelCd": "085",
+    "modelName": "GLE-클래스 W167",
+    "gradeCd": "010",
+    "gradeName": "GLE450d 4MATIC 쿠페",
+    "gradeEnglishName": "GLE450d 4MATIC Coupe",
+    "yearMonth": "202312",
+    "formYear": "2023",
+    "domestic": false,
+    "importType": "REGULAR_IMPORT",
+    "originPrice": 13840,
+    "manufacturerEnglishName": "Mercedes-Benz",
+    "modelGroupCd": "035",
+    "modelGroupName": "GLE-클래스",
+    "modelGroupEnglishName": "GLE-Class",
+    "gradeDetailCd": null,
+    "gradeDetailName": null,
+    "gradeDetailEnglishName": null,
+    "jatoVehicleId": 775152320231109,
+    "warranty": {
+      "userDefined": true,
+      "companyName": null,
+      "bodyMonth": 36,
+      "bodyMileage": 100000,
+      "transmissionMonth": 36,
+      "transmissionMileage": 100000
+    }
+  },
+  "spec": {
+    "type": "CAR",
+    "mileage": 54574,
+    "displacement": 2989,
+    "transmissionName": "오토",
+    "fuelCd": "002",
+    "fuelName": "디젤",
+    "colorName": "흰색",
+    "customColor": null,
+    "seatCount": 5,
+    "tradeType": "D",
+    "tradeOwnerType": null,
+    "tradeCompanyName": null,
+    "bodyName": "SUV"
+  },
+  "advertisement": {
+    "price": 8190
+  }
+}

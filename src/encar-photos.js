@@ -1,0 +1,2 @@
+export function photoURL(value){try{const raw=typeof value==='string'?value:value?.path||value?.url;const u=new URL(raw,'https://ci.encar.com');if(u.protocol!=='https:'||u.hostname!=='ci.encar.com'||u.port||u.username||u.password||!/^\/carpicture\//.test(u.pathname)||! /\.(jpg|jpeg|png|webp)$/i.test(u.pathname))return null;return u.origin+u.pathname;}catch{return null;}}
+export const photoURLs=list=>[...new Set((Array.isArray(list)?list:[]).map(photoURL).filter(Boolean))].slice(0,9);
