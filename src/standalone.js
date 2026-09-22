@@ -1,3 +1,4 @@
+import {powerSignature} from './catalogs.js';
 import {emptyQuote, quoteResult} from './encar.js';
 import {parseListing, matchTpo} from './encar-import.js';
 import {utilization} from './encar-util.js';
@@ -14,6 +15,9 @@ export function standaloneResult(q) {
   const r = quoteResult(q);
   // Automatic fee is a suggestion until the user explicitly confirms its inputs.
   if (q.utilRub === '' || q.utilRub == null) {
+    if (q.powerOrigin === 'catalog' && q.powerConfirmed !== powerSignature(q)) {
+      return {...r,rub:null,usd:null,missing:[...r.missing,'Подтвердите мощность из справочника']};
+    }
     if (r.util?.rub != null && q.utilConfirmed !== utilSignature(q)) {
       return {...r, rub:null, usd:null, missing:[...r.missing,'Подтвердите предложенный утильсбор']};
     }
@@ -29,6 +33,8 @@ export function detectPowertrain(spec = {}) {
 export function readListing(data, id, url, table) {
   const parsed = parseListing(data, id, url);
   const base = data.cars?.base || data.data?.cars?.base || data.data || data;
+  parsed.quote.fuel = String(base.spec?.fuelName || base.spec?.fuelType || '');
+  parsed.quote.market = 'Корея';
   parsed.quote.powertrain = detectPowertrain(base.spec);
   // Encar registration/model year is not proof of age on the customs payment date.
   parsed.quote.utilAge = '';
