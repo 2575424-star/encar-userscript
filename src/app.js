@@ -1,5 +1,5 @@
 import {standaloneQuote, standaloneResult, PREFERENCE_KEYS, UTIL_KEYS, utilSignature, readListing, parseRates} from './standalone.js';
-import {listingURL, embeddedJSON, matchTpo, tpoEngine} from './encar-import.js';
+import {listingURL, embeddedJSON, matchTpo, tpoEngine, listingMatchesId} from './encar-import.js';
 import {utilization} from './encar-util.js';
 
 // TPO_TABLE and APP_CSS are bundled by scripts/build.mjs.
@@ -26,7 +26,7 @@ function startCalculator() {
       <section class="section"><h2><span>05</span>Утилизационный сбор</h2><div class="grid" id="util-fields"></div><p class="hint pending" id="util-suggestion"></p><button class="btn full" id="confirm-util">Подтвердить утильсбор</button><p class="muted">Ставки из калькулятора CRM за 2026 год. Для авто 2023 года проверьте точный возраст на дату уплаты. Для особых условий и гибридов укажите подтверждённую сумму вручную.</p></section>
     </div>
     <aside class="summary"><div class="total"><small>СТОИМОСТЬ В ВОРОНЕЖЕ</small><strong id="total-rub">—</strong><div class="usd" id="total-usd">Заполните недостающие данные</div><div class="sub" id="subtotal">Расчёт с вашими расходами</div></div><section class="section"><h2>Расшифровка расчёта</h2><div class="breakdown" id="breakdown"></div><ul class="missing" id="missing"></ul><button class="btn primary full" id="copy" disabled>Копировать расчёт</button><p class="status" id="copy-status"></p></section><section class="section details-summary"><h2>Ваши настройки</h2><p class="muted">Скидку, расходы и курсы можно сохранить как исходные значения для следующих автомобилей.</p><button class="btn full" id="save-settings">Сохранить настройки</button><p class="muted">Правки текущего расчёта сохраняются автоматически в этом браузере отдельно для каждого объявления.</p></section></aside>
-    </div></div><footer class="footer"><strong id="footer-car">Объявление Encar</strong><span class="chip">v2.0 · автономно</span></footer>
+    </div></div><footer class="footer"><strong id="footer-car">Объявление Encar</strong><span class="chip">v2.0.1 · автономно</span></footer>
     </div>`;
   shadow.append(launcher,dialog);document.body.append(host);
   const $=id=>shadow.getElementById(id);
@@ -140,7 +140,7 @@ function startCalculator() {
   function pageListing(id,url){
     for(const script of document.scripts){if(!script.textContent.includes('__PRELOADED_STATE__'))continue;try{
       const data=embeddedJSON(script.textContent);const base=data.cars?.base;
-      if(String(base?.vehicleId)!==id)continue;
+      if(!listingMatchesId(base,id))continue;
       return readListing(data,id,url,TPO_TABLE);
     }catch{}}
     return null;
@@ -181,9 +181,11 @@ function startCalculator() {
     q={...standaloneQuote(settings()),url:link.url,encarId:link.id};
     let saved;try{saved=GM_getValue('vector-encar:quote:v2:'+activeId,null);}catch{}
     const restored=saved?.q?.encarId===activeId;
-    if(restored){q={...q,...saved.q,url:link.url};dirty=new Set(Object.keys(saved.q));notice('Восстановлен ваш расчёт для этого объявления. Для актуальной цены нажмите «Обновить из объявления».');}
+    if(restored){q={...q,...saved.q,url:link.url};dirty=new Set(Object.keys(saved.q).filter(k=>saved.q[k]!==''&&saved.q[k]!=null));notice('Восстановлен ваш расчёт для этого объявления. Для актуальной цены нажмите «Обновить из объявления».');}
     $('table-search').value='';$('listing-status').textContent='Encar № '+activeId;sync();open();
-    if(!restored)importListing();
+    // An unsuccessful import used to save an empty quote when rates arrived.
+    // Retry that empty draft automatically while preserving any entered values.
+    if(!restored||(!q.brand&&!q.model&&!(Number(q.krw)>0)))importListing();
     if(!q.usdRub&&!q.krwPerUsd&&!q.eurUsd)rates();
   }
   navigate();setInterval(navigate,800);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         VECTOR · Encar — расчёт стоимости
 // @namespace    https://github.com/2575424-star/encar-userscript
-// @version      2.0.0
+// @version      2.0.1
 // @description  Отдельный калькулятор Корея → Бишкек → Воронеж на странице Encar. Без входа в CRM.
 // @author       VECTOR / Boom Auto
 // @match        https://fem.encar.com/*
@@ -108,6 +108,13 @@ function listingURL(value){let u;try{u=new URL(String(value||'').trim())}catch{t
 function embeddedJSON(html){const anchor=html.search(/(?:window\.)?__PRELOADED_STATE__\s*=/);if(anchor<0)throw new Error('В объявлении нет доступных данных');const start=html.indexOf('{',anchor);let quoted=false,escaped=false,depth=0;for(let i=start;i<html.length;i++){const c=html[i];if(quoted){if(escaped)escaped=false;else if(c==='\\')escaped=true;else if(c==='"')quoted=false;}else if(c==='"')quoted=true;else if(c==='{')depth++;else if(c==='}'&&--depth===0)return JSON.parse(html.slice(start,i+1));}throw new Error('Данные объявления неполные');}
 const val=v=>typeof v==='string'||typeof v==='number'?String(v).trim().slice(0,150):'';
 const numeric=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):'';
+// Re-registered Encar listings can have a public advertisement ID different
+// from the underlying vehicle ID. Only accept explicit aliases supplied by Encar.
+function listingMatchesId(base,id){
+ const ids=[base?.vehicleId,base?.queryCarId];
+ if(base?.manage?.dummy===true)ids.push(base.manage.dummyVehicleId);
+ return ids.some(value=>value!=null&&String(value)===String(id));
+}
 function listingVin(base){const candidates=[base.vin,base.spec?.vin,base.vehicleNo,base.vehicle?.vin,base.vehicle?.vehicleNo];return candidates.map(v=>val(v).toUpperCase()).find(v=>/^[A-HJ-NPR-Z0-9]{17}$/.test(v))||'';}
 // Only unit-bearing values or explicitly named PS/kW fields are accepted.
 function listingPower(spec){
@@ -121,7 +128,7 @@ function listingPower(spec){
  return {powerHp:'',powerSource:''};
 }
 function parseListing(data,id,url){if(typeof data==='string')data=embeddedJSON(data);const base=data.cars?.base||data.data?.cars?.base||data.data||data;
- if(base.vehicleId!=null&&String(base.vehicleId)!==id)throw new Error('Encar вернул данные другого автомобиля');
+ if((base.vehicleId!=null||base.queryCarId!=null||base.manage?.dummy===true)&&!listingMatchesId(base,id))throw new Error('Encar вернул данные другого автомобиля');
  const c=base.category||{},s=base.spec||{},a=base.advertisement||{};const price=numeric(a.price);const q={...emptyQuote(),url,encarId:id,brand:val(c.manufacturerEnglishName||c.manufacturerName),model:val(c.modelGroupEnglishName||c.modelEnglishName||c.modelGroupName||c.modelName).replace(/\s*\([^)]*\)/g,'').trim(),trim:val(c.gradeEnglishName||c.gradeName||c.gradeDetailEnglishName||c.gradeDetailName),engine:val(s.displacement),year:val(c.formYear||c.yearMonth?.slice(0,4)),mileage:numeric(s.mileage),krw:price!==''?price*10000:''};
  // Prefer a readable model family when no trim is provided; preserve full text for table matching.
  const names=[c.modelGroupEnglishName,c.modelGroupName,c.modelEnglishName,c.modelName,c.gradeEnglishName,c.gradeName,c.gradeDetailEnglishName,c.gradeDetailName].map(val).filter(Boolean);
@@ -204,7 +211,7 @@ function startCalculator() {
       <section class="section"><h2><span>05</span>Утилизационный сбор</h2><div class="grid" id="util-fields"></div><p class="hint pending" id="util-suggestion"></p><button class="btn full" id="confirm-util">Подтвердить утильсбор</button><p class="muted">Ставки из калькулятора CRM за 2026 год. Для авто 2023 года проверьте точный возраст на дату уплаты. Для особых условий и гибридов укажите подтверждённую сумму вручную.</p></section>
     </div>
     <aside class="summary"><div class="total"><small>СТОИМОСТЬ В ВОРОНЕЖЕ</small><strong id="total-rub">—</strong><div class="usd" id="total-usd">Заполните недостающие данные</div><div class="sub" id="subtotal">Расчёт с вашими расходами</div></div><section class="section"><h2>Расшифровка расчёта</h2><div class="breakdown" id="breakdown"></div><ul class="missing" id="missing"></ul><button class="btn primary full" id="copy" disabled>Копировать расчёт</button><p class="status" id="copy-status"></p></section><section class="section details-summary"><h2>Ваши настройки</h2><p class="muted">Скидку, расходы и курсы можно сохранить как исходные значения для следующих автомобилей.</p><button class="btn full" id="save-settings">Сохранить настройки</button><p class="muted">Правки текущего расчёта сохраняются автоматически в этом браузере отдельно для каждого объявления.</p></section></aside>
-    </div></div><footer class="footer"><strong id="footer-car">Объявление Encar</strong><span class="chip">v2.0 · автономно</span></footer>
+    </div></div><footer class="footer"><strong id="footer-car">Объявление Encar</strong><span class="chip">v2.0.1 · автономно</span></footer>
     </div>`;
   shadow.append(launcher,dialog);document.body.append(host);
   const $=id=>shadow.getElementById(id);
@@ -318,7 +325,7 @@ function startCalculator() {
   function pageListing(id,url){
     for(const script of document.scripts){if(!script.textContent.includes('__PRELOADED_STATE__'))continue;try{
       const data=embeddedJSON(script.textContent);const base=data.cars?.base;
-      if(String(base?.vehicleId)!==id)continue;
+      if(!listingMatchesId(base,id))continue;
       return readListing(data,id,url,TPO_TABLE);
     }catch{}}
     return null;
@@ -359,9 +366,11 @@ function startCalculator() {
     q={...standaloneQuote(settings()),url:link.url,encarId:link.id};
     let saved;try{saved=GM_getValue('vector-encar:quote:v2:'+activeId,null);}catch{}
     const restored=saved?.q?.encarId===activeId;
-    if(restored){q={...q,...saved.q,url:link.url};dirty=new Set(Object.keys(saved.q));notice('Восстановлен ваш расчёт для этого объявления. Для актуальной цены нажмите «Обновить из объявления».');}
+    if(restored){q={...q,...saved.q,url:link.url};dirty=new Set(Object.keys(saved.q).filter(k=>saved.q[k]!==''&&saved.q[k]!=null));notice('Восстановлен ваш расчёт для этого объявления. Для актуальной цены нажмите «Обновить из объявления».');}
     $('table-search').value='';$('listing-status').textContent='Encar № '+activeId;sync();open();
-    if(!restored)importListing();
+    // An unsuccessful import used to save an empty quote when rates arrived.
+    // Retry that empty draft automatically while preserving any entered values.
+    if(!restored||(!q.brand&&!q.model&&!(Number(q.krw)>0)))importListing();
     if(!q.usdRub&&!q.krwPerUsd&&!q.eurUsd)rates();
   }
   navigate();setInterval(navigate,800);

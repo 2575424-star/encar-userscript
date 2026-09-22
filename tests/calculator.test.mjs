@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {standaloneQuote,standaloneResult,utilSignature,readListing,parseRates} from '../src/standalone.js';
 import {quoteResult} from '../src/encar.js';
-import {listingURL,embeddedJSON,matchTpo,tpoEngine,listingPower} from '../src/encar-import.js';
+import {listingURL,embeddedJSON,matchTpo,tpoEngine,listingPower,listingMatchesId} from '../src/encar-import.js';
 import {utilization} from '../src/encar-util.js';
 const table=JSON.parse(fs.readFileSync(new URL('../src/encar-table.json',import.meta.url)));
 const example=JSON.parse(fs.readFileSync(new URL('./fixtures/42752324.json',import.meta.url)));
+const relisted=JSON.parse(fs.readFileSync(new URL('./fixtures/42403782.json',import.meta.url)));
 const base=()=>({...standaloneQuote(),brand:'BMW',model:'X5',year:'2024',krw:100000000,krwPerUsd:1000,eur:32000,eurUsd:1.1,usdRub:90,engine:2993,powerHp:298,powertrain:'ice',utilAge:'new',utilYear:2026});
 
 test('matches CRM formula with independently known amounts',()=>{
@@ -38,6 +39,28 @@ test('parser does not execute page scripts and rejects a different listing',()=>
  const data=embeddedJSON('window.__PRELOADED_STATE__ = '+JSON.stringify({cars:{base:example}})+'; throw new Error("do not run");');
  assert.equal(readListing(data,'42752324','',table).quote.krw,81900000);
  assert.throws(()=>readListing(data,'42752325','',table),/другого/);
+});
+test('re-registered listing 42403782 maps to internal vehicle 42393681 without changing the public URL',()=>{
+ assert.equal(relisted.vehicleId,42393681);assert.equal(relisted.queryCarId,42403782);
+ assert.equal(listingMatchesId(relisted,'42403782'),true);
+ const p=readListing({cars:{base:relisted}},'42403782','https://fem.encar.com/cars/detail/42403782',table);
+ assert.equal(p.quote.encarId,'42403782');assert.match(p.quote.url,/42403782$/);
+ assert.equal(p.quote.brand,'Mercedes-Benz');assert.equal(p.quote.trim,'GLE450d 4MATIC Coupe');
+ assert.equal(p.quote.krw,91900000);assert.equal(p.quote.engine,'2989');assert.equal(p.quote.year,'2024');assert.equal(p.quote.mileage,25095);
+});
+test('explicit dummy alias works without queryCarId; unmarked dummy IDs are not trusted',()=>{
+ const {queryCarId,...withoutQuery}=relisted;
+ assert.equal(listingMatchesId(withoutQuery,'42403782'),true);
+ assert.equal(readListing(withoutQuery,'42403782','',table).quote.krw,91900000);
+ const unmarked={...withoutQuery,manage:{dummy:false,dummyVehicleId:42403782}};
+ assert.equal(listingMatchesId(unmarked,'42403782'),false);
+ assert.throws(()=>readListing(unmarked,'42403782','',table),/другого/);
+});
+test('support for aliases still rejects unrelated/stale cars and missing page identities',()=>{
+ assert.equal(listingMatchesId(relisted,'42752324'),false);
+ assert.equal(listingMatchesId({},'42403782'),false);
+ assert.throws(()=>readListing(relisted,'42752324','',table),/другого/);
+ assert.equal(listingMatchesId(relisted,'42393681'),true);
 });
 test('unknown, hybrid and electric fuels never silently become ICE',()=>{
  for(const fuelName of ['','가솔린+전기','하이브리드','electric']){

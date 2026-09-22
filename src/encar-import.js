@@ -6,6 +6,13 @@ export function listingURL(value){let u;try{u=new URL(String(value||'').trim())}
 export function embeddedJSON(html){const anchor=html.search(/(?:window\.)?__PRELOADED_STATE__\s*=/);if(anchor<0)throw new Error('В объявлении нет доступных данных');const start=html.indexOf('{',anchor);let quoted=false,escaped=false,depth=0;for(let i=start;i<html.length;i++){const c=html[i];if(quoted){if(escaped)escaped=false;else if(c==='\\')escaped=true;else if(c==='"')quoted=false;}else if(c==='"')quoted=true;else if(c==='{')depth++;else if(c==='}'&&--depth===0)return JSON.parse(html.slice(start,i+1));}throw new Error('Данные объявления неполные');}
 const val=v=>typeof v==='string'||typeof v==='number'?String(v).trim().slice(0,150):'';
 const numeric=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number(v)>=0?Number(v):'';
+// Re-registered Encar listings can have a public advertisement ID different
+// from the underlying vehicle ID. Only accept explicit aliases supplied by Encar.
+export function listingMatchesId(base,id){
+ const ids=[base?.vehicleId,base?.queryCarId];
+ if(base?.manage?.dummy===true)ids.push(base.manage.dummyVehicleId);
+ return ids.some(value=>value!=null&&String(value)===String(id));
+}
 export function listingVin(base){const candidates=[base.vin,base.spec?.vin,base.vehicleNo,base.vehicle?.vin,base.vehicle?.vehicleNo];return candidates.map(v=>val(v).toUpperCase()).find(v=>/^[A-HJ-NPR-Z0-9]{17}$/.test(v))||'';}
 // Only unit-bearing values or explicitly named PS/kW fields are accepted.
 export function listingPower(spec){
@@ -19,7 +26,7 @@ export function listingPower(spec){
  return {powerHp:'',powerSource:''};
 }
 export function parseListing(data,id,url){if(typeof data==='string')data=embeddedJSON(data);const base=data.cars?.base||data.data?.cars?.base||data.data||data;
- if(base.vehicleId!=null&&String(base.vehicleId)!==id)throw new Error('Encar вернул данные другого автомобиля');
+ if((base.vehicleId!=null||base.queryCarId!=null||base.manage?.dummy===true)&&!listingMatchesId(base,id))throw new Error('Encar вернул данные другого автомобиля');
  const c=base.category||{},s=base.spec||{},a=base.advertisement||{};const price=numeric(a.price);const q={...emptyQuote(),url,encarId:id,brand:val(c.manufacturerEnglishName||c.manufacturerName),model:val(c.modelGroupEnglishName||c.modelEnglishName||c.modelGroupName||c.modelName).replace(/\s*\([^)]*\)/g,'').trim(),trim:val(c.gradeEnglishName||c.gradeName||c.gradeDetailEnglishName||c.gradeDetailName),engine:val(s.displacement),year:val(c.formYear||c.yearMonth?.slice(0,4)),mileage:numeric(s.mileage),krw:price!==''?price*10000:''};
  // Prefer a readable model family when no trim is provided; preserve full text for table matching.
  const names=[c.modelGroupEnglishName,c.modelGroupName,c.modelEnglishName,c.modelName,c.gradeEnglishName,c.gradeName,c.gradeDetailEnglishName,c.gradeDetailName].map(val).filter(Boolean);

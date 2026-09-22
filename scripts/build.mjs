@@ -4,7 +4,7 @@ const read = path => fs.readFileSync(new URL(path, root), 'utf8');
 const header = `// ==UserScript==
 // @name         VECTOR · Encar — расчёт стоимости
 // @namespace    https://github.com/2575424-star/encar-userscript
-// @version      2.0.0
+// @version      2.0.1
 // @description  Отдельный калькулятор Корея → Бишкек → Воронеж на странице Encar. Без входа в CRM.
 // @author       VECTOR / Boom Auto
 // @match        https://fem.encar.com/*
